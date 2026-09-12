@@ -1,4 +1,5 @@
 #include "game.hpp"
+#include "trained_policy.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
@@ -47,6 +48,35 @@ SkPoint coursePoint(int segment, float t) {
               (2*p0.y() - 5*p1.y() + 4*p2.y() - p3.y()) * t2 +
               (-p0.y() + 3*p1.y() - 3*p2.y() + p3.y()) * t3)};
 }
+
+
+SkPoint courseSample(int index) {
+  constexpr int samplesPerSegment = 20;
+  constexpr int sampleCount = static_cast<int>(kCourse.size()) * samplesPerSegment;
+  index = (index % sampleCount + sampleCount) % sampleCount;
+  return coursePoint(index / samplesPerSegment,
+                     (index % samplesPerSegment) / static_cast<float>(samplesPerSegment));
+}
+
+int nearestCourseSample(float x, float y) {
+  constexpr int sampleCount = static_cast<int>(kCourse.size()) * 20;
+  int bestIndex = 0;
+  float bestDistance = 1.0e30F;
+  for (int i = 0; i < sampleCount; ++i) {
+    const auto p = courseSample(i);
+    const float distance = (p.x()-x)*(p.x()-x) + (p.y()-y)*(p.y()-y);
+    if (distance < bestDistance) { bestDistance = distance; bestIndex = i; }
+  }
+  return bestIndex;
+}
+
+float wrapAngle(float value) {
+  while (value > kPi) value -= 2.0F * kPi;
+  while (value < -kPi) value += 2.0F * kPi;
+  return value;
+}
+
+float sigmoid(float value) { return 1.0F / (1.0F + std::exp(-value)); }
 
 SkPath coursePath() {
   SkPath path;
@@ -118,8 +148,8 @@ void Game::reset() {
   wasDrifting_ = false;
   cameraX_ = cameraY_ = 0.0F;
   previousX_ = x_;
+  previousY_ = y_;
   lapTime_ = 0.0F;
-  passedHalfway_ = false;
   checkpoint_ = 1;
 }
 
@@ -127,10 +157,52 @@ bool Game::onRoad(float x, float y) const {
   return courseDistance(x, y) < 76.0F;
 }
 
+
+Input Game::aiInput() const {
+  constexpr int sampleCount = static_cast<int>(kCourse.size()) * 20;
+  const int nearest = nearestCourseSample(x_, y_);
+  const int targetIndex = (nearest + 14) % sampleCount;
+  const auto current = courseSample(nearest);
+  const auto next = courseSample(nearest + 1);
+  const auto target = courseSample(targetIndex);
+  const auto futureNext = courseSample(targetIndex + 1);
+  float tx = next.x() - current.x(), ty = next.y() - current.y();
+  float fx = futureNext.x() - target.x(), fy = futureNext.y() - target.y();
+  const float tl = std::hypot(tx, ty), fl = std::hypot(fx, fy);
+  tx /= tl; ty /= tl; fx /= fl; fy /= fl;
+  const float desired = std::atan2(target.y() - y_, target.x() - x_);
+  const float error = wrapAngle(desired - angle_);
+  const float lateral = (x_ - current.x()) * -ty + (y_ - current.y()) * tx;
+  const float curve = std::atan2(tx * fy - ty * fx, tx * fx + ty * fy);
+  const std::array<float, policy::kObservations> observation{
+      std::sin(error), std::cos(error), std::clamp(lateral / 76.0F, -2.0F, 2.0F),
+      velocityX_ / 45.0F, velocityY_ / 15.0F, yawRate_ / 2.0F, curve,
+      onRoad(x_, y_) ? 1.0F : 0.0F};
+
+  std::array<float, policy::kHidden> hidden{};
+  std::size_t cursor = 0;
+  for (int i = 0; i < policy::kObservations; ++i)
+    for (int h = 0; h < policy::kHidden; ++h)
+      hidden[h] += observation[i] * policy::kWeights[cursor++];
+  for (float& value : hidden) value = std::tanh(value + policy::kWeights[cursor++]);
+  std::array<float, policy::kOutputs> output{};
+  for (int h = 0; h < policy::kHidden; ++h)
+    for (int o = 0; o < policy::kOutputs; ++o)
+      output[o] += hidden[h] * policy::kWeights[cursor++];
+  for (float& value : output) value += policy::kWeights[cursor++];
+
+  return Input{.throttle = sigmoid(output[0]), .brake = 0.0F,
+               .steer = std::tanh(output[1]), .reset = false,
+               .drift = sigmoid(output[2]) > 0.62F, .toggleAi = false};
+}
+
 void Game::update(float dt, const Input& input) {
   dt = std::min(dt, 0.05F);
+  if (input.toggleAi && !aiToggleHeld_) aiEnabled_ = !aiEnabled_;
+  aiToggleHeld_ = input.toggleAi;
   if (input.reset && !resetHeld_) reset();
   resetHeld_ = input.reset;
+  const Input control = aiEnabled_ ? aiInput() : input;
 
   // Six-state nonlinear bicycle model: compact enough for batched training.
   constexpr float mass = 1180.0F, inertia = 1760.0F;
@@ -139,32 +211,32 @@ void Game::update(float dt, const Input& input) {
   const float surfaceGrip = road ? 1.34F : 0.58F;
   const float rolling = road ? 34.0F : 280.0F;
   const float gripF = surfaceGrip;
-  const float gripR = surfaceGrip * (input.drift ? 0.79F : 1.0F);
-  const float throttleTarget = input.accelerate ? 1.0F : 0.0F;
-  const float brakeTarget = input.brake ? 1.0F : 0.0F;
-  const float steerTarget = (input.right ? 1.0F : 0.0F) - (input.left ? 1.0F : 0.0F);
+  const float gripR = surfaceGrip * (control.drift ? 0.79F : 1.0F);
+  const float throttleTarget = control.throttle;
+  const float brakeTarget = control.brake;
+  const float steerTarget = control.steer;
   throttle_ += (throttleTarget - throttle_) * std::min(1.0F, 11.0F * dt);
   brake_ += (brakeTarget - brake_) * std::min(1.0F, 9.0F * dt);
   steer_ += (steerTarget - steer_) * std::min(1.0F, 13.0F * dt);
 
   const float speedAbs = std::abs(velocityX_);
-  const float driftSteer = input.drift ? 1.12F : 1.0F;
+  const float driftSteer = control.drift ? 1.12F : 1.0F;
   const float steering = steer_ * driftSteer * 0.42F / (1.0F + speedAbs * 0.022F);
   const float safeSpeed = std::max(speedAbs, 2.5F);
   const float slipF = std::atan2(velocityY_ + frontAxle * yawRate_, safeSpeed) - steering;
   const float slipR = std::atan2(velocityY_ - rearAxle * yawRate_, safeSpeed);
 
   const float slipMagnitude = std::abs(slipR);
-  const bool validDrift = input.drift && road && speedAbs > 13.0F &&
+  const bool validDrift = control.drift && road && speedAbs > 13.0F &&
                           slipMagnitude > 0.08F && slipMagnitude < 0.72F;
   if (validDrift)
     driftCharge_ = std::min(1.0F, driftCharge_ + dt * (0.20F + slipMagnitude * 0.85F));
-  if (wasDrifting_ && !input.drift) {
+  if (wasDrifting_ && !control.drift) {
     if (driftCharge_ >= 0.22F) turboTime_ = 0.28F + driftCharge_ * 0.92F;
     driftCharge_ = 0.0F;
   }
   if (!road) driftCharge_ = std::max(0.0F, driftCharge_ - dt * 0.75F);
-  wasDrifting_ = input.drift;
+  wasDrifting_ = control.drift;
   turboTime_ = std::max(0.0F, turboTime_ - dt);
 
   const float turboForce = turboTime_ > 0.0F ? 4400.0F : 0.0F;
@@ -185,7 +257,7 @@ void Game::update(float dt, const Input& input) {
   forceR = std::clamp(forceR, -budgetR, budgetR);
 
   // A light stability assist preserves slides but makes keyboard corrections usable.
-  if (!input.drift) {
+  if (!control.drift) {
     forceR -= velocityY_ * 420.0F;
     yawRate_ *= std::exp(-1.35F * dt);
   }
@@ -201,13 +273,14 @@ void Game::update(float dt, const Input& input) {
   yawAccel += (kinematicYaw - yawRate_) * (1.0F - dynamicBlend) * 9.0F;
   velocityX_ = std::clamp(velocityX_ + accelX * dt, -18.0F, turboTime_ > 0.0F ? 72.0F : 62.0F);
   velocityY_ = std::clamp(velocityY_ + accelY * dt, -24.0F, 24.0F);
-  velocityY_ *= std::exp(-(input.drift ? 0.18F : 1.85F) * dt);
+  velocityY_ *= std::exp(-(control.drift ? 0.18F : 1.85F) * dt);
   yawRate_ = std::clamp(yawRate_ + yawAccel * dt, -2.5F, 2.5F);
-  if (!input.accelerate && !input.brake && std::hypot(velocityX_, velocityY_) < 0.35F)
+  if (control.throttle < 0.01F && control.brake < 0.01F && std::hypot(velocityX_, velocityY_) < 0.35F)
     velocityX_ = velocityY_ = yawRate_ = 0.0F;
 
   angle_ += yawRate_ * dt;
   previousX_ = x_;
+  previousY_ = y_;
   x_ += (std::cos(angle_) * velocityX_ - std::sin(angle_) * velocityY_) * dt * 14.0F;
   y_ += (std::sin(angle_) * velocityX_ + std::cos(angle_) * velocityY_) * dt * 14.0F;
   lapTime_ += dt;
@@ -235,8 +308,25 @@ void Game::update(float dt, const Input& input) {
     return;
   }
 
-  const SkPoint target = kCourse[checkpoint_];
-  if (std::hypot(x_ - target.x(), y_ - target.y()) < 105.0F) {
+  // Mario Kart-style ordered key checkpoints. A gate counts only when its
+  // plane is crossed forward and within the road-width span.
+  const SkPoint gate = kCourse[checkpoint_];
+  const SkPoint before = coursePoint(checkpoint_, 0.0F);
+  const SkPoint after = coursePoint(checkpoint_, 0.04F);
+  float tangentX = after.x() - before.x(), tangentY = after.y() - before.y();
+  const float tangentLength = std::hypot(tangentX, tangentY);
+  tangentX /= tangentLength; tangentY /= tangentLength;
+  const float previousSide = (previousX_ - gate.x()) * tangentX +
+                             (previousY_ - gate.y()) * tangentY;
+  const float currentSide = (x_ - gate.x()) * tangentX +
+                            (y_ - gate.y()) * tangentY;
+  const float acrossGate = std::abs((x_ - gate.x()) * -tangentY +
+                                    (y_ - gate.y()) * tangentX);
+  const float worldVx = std::cos(angle_) * velocityX_ - std::sin(angle_) * velocityY_;
+  const float worldVy = std::sin(angle_) * velocityX_ + std::cos(angle_) * velocityY_;
+  const bool movingForward = worldVx * tangentX + worldVy * tangentY > 1.0F;
+  if (previousSide < 0.0F && currentSide >= 0.0F &&
+      acrossGate < 88.0F && movingForward) {
     checkpoint_ = (checkpoint_ + 1) % static_cast<int>(kCourse.size());
     if (checkpoint_ == 1) {
       ++laps_;
@@ -322,14 +412,15 @@ void Game::drawHud(SkCanvas& canvas) const {
   panel.setColor(SkColorSetARGB(210, 10, 14, 20));
   panel.setAntiAlias(true);
   canvas.drawRoundRect(SkRect::MakeXYWH(22, 22, 300, 146), 16, 16, panel);
-  text(canvas, "FIADA", 42, 56, 26, SkColorSetRGB(255, 202, 58));
+  text(canvas, aiEnabled_ ? "FIADA  [AI]" : "FIADA  [HUMAN]", 42, 56, 26, SkColorSetRGB(255, 202, 58));
   text(canvas, std::format("SPEED  {:03.0f} km/h", std::abs(velocityX_) * 3.6F), 42, 86, 18, SK_ColorWHITE);
   text(canvas, std::format("LAP    {}   {:05.2f}s", laps_ + 1, lapTime_), 42, 112, 18, SK_ColorWHITE);
   const auto best = bestLap_ > 0.0F ? std::format("BEST   {:05.2f}s", bestLap_) : "BEST   --.--s";
   text(canvas, best, 42, 136, 16, SkColorSetRGB(166, 184, 205));
   const auto turbo = std::format("DRIFT  {:03.0f}%{}", driftCharge_ * 100.0F, turboTime_ > 0.0F ? "  TURBO!" : "");
+  text(canvas, std::format("CHECKPOINT  {:02}/12", checkpoint_), 174, 136, 14, SkColorSetRGB(166, 184, 205));
   text(canvas, turbo, 42, 160, 16, turboTime_ > 0.0F ? SkColorSetRGB(64, 224, 255) : SkColorSetRGB(255, 174, 62));
-  text(canvas, "WASD / ARROWS DRIVE   HOLD SPACE TO DRIFT   RELEASE FOR TURBO   R RESET", 24, height_ - 24.0F, 15,
+  text(canvas, "WASD / ARROWS DRIVE   HOLD SPACE TO DRIFT   P TOGGLE AI   R RESET", 24, height_ - 24.0F, 15,
        SkColorSetARGB(220, 255, 255, 255));
 }
 

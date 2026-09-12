@@ -13,12 +13,12 @@ class SkImage;
 namespace fiada {
 
 struct Input {
-  bool accelerate{};
-  bool brake{};
-  bool left{};
-  bool right{};
+  float throttle{};
+  float brake{};
+  float steer{};
   bool reset{};
   bool drift{};
+  bool toggleAi{};
 };
 
 class Game {
@@ -27,6 +27,9 @@ class Game {
   void resize(int width, int height);
   void update(float dt, const Input& input);
   void render(SkCanvas& canvas);
+  void enableAi() { aiEnabled_ = true; }
+  [[nodiscard]] int laps() const { return laps_; }
+  [[nodiscard]] int checkpoint() const { return checkpoint_; }
 
  private:
   void reset();
@@ -35,6 +38,7 @@ class Game {
   void drawTrack(SkCanvas& canvas) const;
   void drawHud(SkCanvas& canvas) const;
   void drawCar(SkCanvas& canvas) const;
+  Input aiInput() const;
 
   int width_{1280};
   int height_{720};
@@ -56,9 +60,11 @@ class Game {
   float lapTime_{};
   float bestLap_{};
   int laps_{};
-  bool passedHalfway_{};
   int checkpoint_{};
   bool resetHeld_{};
+  bool aiToggleHeld_{};
+  bool aiEnabled_{};
+  float previousY_{-205.0F};
   sk_sp<SkImage> car_;
   sk_sp<SkImage> cone_;
 };

@@ -23,7 +23,7 @@ foreach(codec libjpeg.a libpng16.a libwebpdemux.a libwebpmux.a libwebp.a libshar
   endif()
 endforeach()
 
-add_executable(FIADA WIN32 src/main.cpp src/game.cpp src/game.hpp)
+add_executable(FIADA WIN32 src/main.cpp src/game.cpp src/game.hpp src/trained_policy.hpp)
 target_include_directories(FIADA PRIVATE "${SKIA_ROOT}/include/skia")
 target_compile_definitions(FIADA PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_compile_options(FIADA PRIVATE

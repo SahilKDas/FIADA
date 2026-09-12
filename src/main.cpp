@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -71,7 +72,15 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
 bool down(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
 }  // namespace
 
-int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int showCommand) {
+int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCommand) {
+  if (std::string_view(commandLine).find("--ai-smoke") != std::string_view::npos) {
+    fiada::Game simulation;
+    simulation.resize(1280, 720);
+    simulation.enableAi();
+    for (int step = 0; step < 120 * 120 && simulation.laps() == 0; ++step)
+      simulation.update(1.0F / 120.0F, {});
+    return simulation.laps() > 0 ? 0 : 3;
+  }
   SetProcessDPIAware();
   WNDCLASSW wc{};
   wc.lpfnWndProc = windowProc;
@@ -109,12 +118,13 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int showCommand) {
     accumulator += std::min(std::chrono::duration<float>(now - previous).count(), 0.1F);
     previous = now;
     fiada::Input input{
-      .accelerate = down('W') || down(VK_UP),
-      .brake = down('S') || down(VK_DOWN),
-      .left = down('A') || down(VK_LEFT),
-      .right = down('D') || down(VK_RIGHT),
+      .throttle = (down('W') || down(VK_UP)) ? 1.0F : 0.0F,
+      .brake = (down('S') || down(VK_DOWN)) ? 1.0F : 0.0F,
+      .steer = (down('D') || down(VK_RIGHT) ? 1.0F : 0.0F) -
+               (down('A') || down(VK_LEFT) ? 1.0F : 0.0F),
       .reset = down('R'),
       .drift = down(VK_SPACE),
+      .toggleAi = down('P'),
     };
     while (accumulator >= fixedStep) {
       app.game.update(fixedStep, input);

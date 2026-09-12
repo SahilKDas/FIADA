@@ -10,9 +10,14 @@ FIADA is currently a playable top-down 2D racing prototype with a flowing, gold-
 - `S` / `Down`: brake and reverse
 - `A D` / arrow keys: steer
 - `Space`: hold to drift; release a charged drift for a mini-turbo
+- `P`: toggle the trained reinforcement-learning driver
 - `R`: reset the car
 
 Complete a clockwise lap. Leaving the asphalt dramatically changes grip and rolling resistance. The camera uses a central dead zone and follows only within the authored circuit bounds; driving entirely off-screen resets the car.
+
+## Checkpoints and AI
+
+Laps use twelve ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 8-12-3 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. Run `python scripts/train_policy.py` to retrain and export the 147 parameters.
 
 ## Physics
 
