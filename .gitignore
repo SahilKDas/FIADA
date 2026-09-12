@@ -1,0 +1,9 @@
+/build/
+/.cache/
+*.user
+*.pdb
+*.ilk
+
+/.deps/
+/dist/
+/build-*/
