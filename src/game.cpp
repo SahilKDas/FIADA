@@ -29,14 +29,17 @@ namespace fiada {
 namespace {
 constexpr float kPi = 3.14159265358979323846F;
 
-constexpr std::array<SkPoint, 18> kCourse{{
-    {-520, -300}, {-250, -430}, {40, -470}, {300, -400},
-    {520, -470}, {740, -300}, {650, -100}, {760, 100},
-    {650, 310}, {420, 430}, {180, 350}, {0, 480},
-    {-250, 430}, {-480, 350}, {-720, 200}, {-760, -20},
-    {-600, -180}, {-390, -110},
+constexpr std::array<SkPoint, 29> kCourse{{
+    {-650, -350}, {-390, -390}, {-140, -320}, {80, -410},
+    {330, -330}, {610, -370}, {760, -250}, {725, -90},
+    {580, -25}, {340, -110}, {110, -35}, {-105, -125},
+    {-300, -45}, {-365, 90}, {-260, 185}, {-35, 125},
+    {185, 65}, {405, 145}, {590, 105}, {665, 225},
+    {560, 355}, {320, 415}, {70, 330}, {-180, 420},
+    {-455, 360}, {-690, 295}, {-785, 145}, {-745, -75},
+    {-705, -260},
 }};
-constexpr int kSamplesPerSegment = 20;
+constexpr int kSamplesPerSegment = 12;
 constexpr int kSampleCount = static_cast<int>(kCourse.size()) * kSamplesPerSegment;
 
 SkPoint coursePoint(int segment, float t) {
@@ -163,14 +166,14 @@ void Game::reset() {
 }
 
 bool Game::onRoad(float x, float y) const {
-  return courseDistance(x, y) < 76.0F;
+  return courseDistance(x, y) < 68.0F;
 }
 
 
 
 std::array<float, 8> Game::observation() const {
   const int nearest = nearestCourseSample(x_, y_);
-  const int targetIndex = (nearest + 18) % kSampleCount;
+  const int targetIndex = (nearest + 11) % kSampleCount;
   const auto currentRaw = courseSample(nearest);
   const auto next = courseSample(nearest + 1);
   const auto targetRaw = courseSample(targetIndex);
@@ -377,7 +380,7 @@ void Game::update(float dt, const Input& input) {
   const float worldVy = std::sin(angle_) * velocityX_ + std::cos(angle_) * velocityY_;
   const bool movingForward = worldVx * tangentX + worldVy * tangentY > 1.0F;
   if (previousSide < 0.0F && currentSide >= 0.0F &&
-      acrossGate < 88.0F && movingForward) {
+      acrossGate < 78.0F && movingForward) {
     checkpoint_ = (checkpoint_ + 1) % static_cast<int>(kCourse.size());
     if (trainingMode_) trainingReward_ += 35.0F;
     if (checkpoint_ == 1) {
@@ -407,13 +410,13 @@ void Game::drawTrack(SkCanvas& canvas) const {
   stroke.setStrokeCap(SkPaint::kRound_Cap);
   stroke.setStrokeJoin(SkPaint::kRound_Join);
 
-  stroke.setStrokeWidth(184.0F);
+  stroke.setStrokeWidth(168.0F);
   stroke.setColor(SkColorSetRGB(116, 76, 10));
   canvas.drawPath(course, stroke);
-  stroke.setStrokeWidth(170.0F);
+  stroke.setStrokeWidth(154.0F);
   stroke.setColor(SkColorSetRGB(232, 174, 43));
   canvas.drawPath(course, stroke);
-  stroke.setStrokeWidth(150.0F);
+  stroke.setStrokeWidth(136.0F);
   stroke.setColor(SkColorSetRGB(39, 40, 43));
   canvas.drawPath(course, stroke);
 

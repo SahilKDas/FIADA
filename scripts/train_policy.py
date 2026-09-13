@@ -4,9 +4,11 @@ import argparse, json
 from pathlib import Path
 import numpy as np
 
-CONTROL=np.array([[-520,-300],[-250,-430],[40,-470],[300,-400],[520,-470],[740,-300],
- [650,-100],[760,100],[650,310],[420,430],[180,350],[0,480],[-250,430],
- [-480,350],[-720,200],[-760,-20],[-600,-180],[-390,-110]],dtype=np.float64)
+CONTROL=np.array([[-650,-350],[-390,-390],[-140,-320],[80,-410],[330,-330],[610,-370],
+ [760,-250],[725,-90],[580,-25],[340,-110],[110,-35],[-105,-125],[-300,-45],
+ [-365,90],[-260,185],[-35,125],[185,65],[405,145],[590,105],[665,225],
+ [560,355],[320,415],[70,330],[-180,420],[-455,360],[-690,295],[-785,145],
+ [-745,-75],[-705,-260]],dtype=np.float64)
 def catmull(p0,p1,p2,p3,t):
  t2=t*t;t3=t2*t
  return .5*((2*p1)+(-p0+p2)*t+(2*p0-5*p1+4*p2-p3)*t2+(-p0+3*p1-3*p2+p3)*t3)
@@ -34,8 +36,8 @@ def evaluate(w,steps=1100):
   normal=np.stack([-tangent[:,1],tangent[:,0]],axis=1)
   lateral=np.sum((np.stack([x,y],1)-COURSE[idx])*normal,axis=1)
   curve=np.arctan2(tangent[:,0]*future[:,1]-tangent[:,1]*future[:,0],np.sum(tangent*future,axis=1))
-  road=np.abs(lateral)<76
-  obs=np.stack([np.sin(err),np.cos(err),np.clip(lateral/76,-2,2),speed/45,vy/15,yaw/2,curve,road],1)
+  road=np.abs(lateral)<68
+  obs=np.stack([np.sin(err),np.cos(err),np.clip(lateral/68,-2,2),speed/45,vy/15,yaw/2,curve,road],1)
   hidden=np.tanh(np.einsum('pi,pih->ph',obs,W1)+b1)
   out=np.einsum('ph,pho->po',hidden,W2)+b2
   throttle=1/(1+np.exp(-out[:,0])); targetsteer=np.tanh(out[:,1]); drift=1/(1+np.exp(-out[:,2]))

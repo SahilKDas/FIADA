@@ -2,7 +2,7 @@
 
 **Facio Ludum Autocinetum et Doceo Cerebrum Computatri Currus Agere** — a Latin-inspired name for a racing game built to train a neural network to drive.
 
-FIADA is currently a playable top-down 2D racing prototype with a long, flowing, gold-themed 18-sector technical circuit rendered entirely with [Skia](https://skia.org/). Its small deterministic game core is intended to grow into a neural-network training environment.
+FIADA is currently a playable top-down 2D racing prototype with a long, flowing, gold-themed 29-sector technical circuit rendered entirely with [Skia](https://skia.org/). Its small deterministic game core is intended to grow into a neural-network training environment.
 
 ## Play
 
@@ -17,7 +17,7 @@ Complete a clockwise lap. Leaving the asphalt dramatically changes grip and roll
 
 ## Checkpoints and AI
 
-Laps use eighteen ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 8-12-3 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. Run `python scripts/train_policy.py` to retrain and export the 147 parameters.
+Laps use twenty-nine ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 8-12-3 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. Run `python scripts/train_policy.py` to retrain and export the 147 parameters.
 
 
 
@@ -32,7 +32,7 @@ cmake --build build-native-trainer --target FIADA_train
 ./build-native-trainer/FIADA_train.exe --evaluate ./assets/policy/fiada_policy.bin
 ```
 
-The current compact policy is an early checkpoint, not a solved agent: on the expanded 18-sector circuit its frozen native baseline completed 1 of 33 holdout laps, reached checkpoint 4 canonically, and escaped the screen in 1 of 33 episodes. The external binary is loaded at runtime so training can continue without recompiling the game.
+The current policy was retrained on this 29-sector circuit. Native reward improved from 707.11 to 1978.38; the frozen unseen holdout completed 8 of 33 laps with zero screen escapes, while the canonical grid run currently reaches checkpoint 2. The model remains an early checkpoint and is stored externally so training can continue without recompiling the game.
 
 ## Physics
 
