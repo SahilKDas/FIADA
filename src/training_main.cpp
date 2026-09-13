@@ -14,12 +14,12 @@
 
 namespace {
 constexpr std::size_t P = fiada::policy::kWeights.size();
-fiada::Input act(const std::array<float,8>& obs, const std::array<float,P>& w) {
-  std::array<float,12> h{}; std::size_t k=0;
-  for(int i=0;i<8;++i) for(int j=0;j<12;++j) h[j]+=obs[i]*w[k++];
+fiada::Input act(const std::array<float,fiada::policy::kObservations>& obs, const std::array<float,P>& w) {
+  std::array<float,fiada::policy::kHidden> h{}; std::size_t k=0;
+  for(int i=0;i<fiada::policy::kObservations;++i) for(int j=0;j<fiada::policy::kHidden;++j) h[j]+=obs[i]*w[k++];
   for(float& v:h) v=std::tanh(v+w[k++]);
-  std::array<float,3> o{};
-  for(int i=0;i<12;++i) for(int j=0;j<3;++j) o[j]+=h[i]*w[k++];
+  std::array<float,fiada::policy::kOutputs> o{};
+  for(int i=0;i<fiada::policy::kHidden;++i) for(int j=0;j<fiada::policy::kOutputs;++j) o[j]+=h[i]*w[k++];
   for(float& v:o) v+=w[k++];
   const auto sigmoid=[](float x){return 1.0F/(1.0F+std::exp(-x));};
   float longitudinal=std::tanh(o[0]);
@@ -33,7 +33,7 @@ fiada::Input act(const std::array<float,8>& obs, const std::array<float,P>& w) {
             std::clamp(1.8F*obs[0]-1.25F*obs[2]+1.4F*obs[6]-0.3F*obs[5],-1.0F,1.0F),
             std::clamp(.18F+.38F*std::max(std::abs(obs[0]),std::abs(obs[2])),.18F,.72F)),-1.0F,1.0F),
           .reset=false,
-          .drift=sigmoid(o[2])>.62F,.toggleAi=false};
+          .drift=(sigmoid(o[2])>.48F || (std::abs(obs[6])>.13F && obs[3]>.30F)) && obs[9]<.05F && obs[8]<.36F,.toggleAi=false};
 }
 float evaluate(const std::array<float,P>& weights, std::uint32_t baseSeed, bool randomized=true) {
   float total=0; const std::uint32_t episodes=randomized?3:1;
@@ -54,30 +54,33 @@ int main(int argc,char** argv){
     std::ifstream input(argv[2], std::ios::binary);
     input.read(reinterpret_cast<char*>(weights.data()), sizeof(weights));
     if (!input) return 2;
-    int completed=0, terminals=0;
+    int completed=0, terminals=0, totalMiniTurbos=0; long long driftSteps=0, turboSteps=0;
     for (std::uint32_t episode=0; episode<33; ++episode) {
       fiada::Game game(false); game.beginTrainingEpisode(episode==0?0:900000+episode*7919);
       for(int step=0;step<120*90 && !game.trainingTerminal() && game.laps()==0;++step)
-        game.update(1.0F/120.0F,act(game.observation(),weights));
-      completed += game.laps()>0; terminals += game.trainingTerminal();
+        { const auto command=act(game.observation(),weights); driftSteps += command.drift; game.update(1.0F/120.0F,command); turboSteps += game.turboTime()>0.0F; }
+      completed += game.laps()>0; terminals += game.trainingTerminal(); totalMiniTurbos += game.miniTurbos();
       if(episode==0) std::cout<<"canonical_lap="<<(game.laps()>0)<<" checkpoint="<<game.checkpoint()<<"\n";
     }
-    std::cout<<"holdout_laps="<<completed<<"/33 terminal_escapes="<<terminals<<"/33\n";
+    std::cout<<"holdout_laps="<<completed<<"/33 terminal_escapes="<<terminals<<"/33 mini_turbos="<<totalMiniTurbos<<" drift_seconds="<<driftSteps/120.0<<" turbo_seconds="<<turboSteps/120.0<<"\n";
     return completed>0 ? 0 : 3;
   }
   std::filesystem::path output=argc>1?argv[1]:"assets/policy/fiada_policy.bin";
   std::mt19937 rng(0xF1ADA); std::normal_distribution<float> normal;
   std::array<float,P> mean=fiada::policy::kWeights, deviation{};
-  { std::ifstream prior(output, std::ios::binary); if (prior) prior.read(reinterpret_cast<char*>(mean.data()), sizeof(mean)); }
+  { std::ifstream prior(output, std::ios::binary | std::ios::ate);
+    if (prior && prior.tellg() == static_cast<std::streamoff>(sizeof(mean))) { prior.seekg(0); prior.read(reinterpret_cast<char*>(mean.data()), sizeof(mean)); }
+    else { mean.fill(0.0F); mean[P-3]=1.5F; mean[P-1]=-1.25F; }
+  }
   deviation.fill(.018F);
-  constexpr int population=32, elite=6, generations=60;
-  std::array<float,P> best=mean; float bestScore=evaluate(best,1000,false);
+  constexpr int population=24, elite=5, generations=30;
+  std::array<float,P> best=mean; float bestScore=evaluate(best,1000,true);
   struct Candidate{std::array<float,P>w;float score;};
   std::vector<Candidate> candidates(population);
   for(int generation=0;generation<generations;++generation){
     for(int n=0;n<population;++n){
       for(std::size_t i=0;i<P;++i)candidates[n].w[i]=mean[i]+normal(rng)*deviation[i];
-      candidates[n].score=evaluate(candidates[n].w,100000+generation*101,generation>=30);
+      candidates[n].score=evaluate(candidates[n].w,100000+generation*101,true);
     }
     std::partial_sort(candidates.begin(),candidates.begin()+elite,candidates.end(),
       [](const auto&a,const auto&b){return a.score>b.score;});

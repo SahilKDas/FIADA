@@ -16,7 +16,7 @@ COURSE=np.vstack([catmull(CONTROL[(i-1)%len(CONTROL)],CONTROL[i],CONTROL[(i+1)%l
  for i in range(len(CONTROL)) for t in np.linspace(0,1,20,endpoint=False)])
 TANG=np.roll(COURSE,-1,axis=0)-COURSE
 TANG/=np.linalg.norm(TANG,axis=1,keepdims=True)
-N=len(COURSE); OBS=8; H=12; OUT=3; PARAMS=OBS*H+H+H*OUT+OUT
+N=len(COURSE); OBS=10; H=12; OUT=3; PARAMS=OBS*H+H+H*OUT+OUT
 
 def unpack(w):
  a=OBS*H;b=a+H;c=b+H*OUT
@@ -37,7 +37,7 @@ def evaluate(w,steps=1100):
   lateral=np.sum((np.stack([x,y],1)-COURSE[idx])*normal,axis=1)
   curve=np.arctan2(tangent[:,0]*future[:,1]-tangent[:,1]*future[:,0],np.sum(tangent*future,axis=1))
   road=np.abs(lateral)<68
-  obs=np.stack([np.sin(err),np.cos(err),np.clip(lateral/68,-2,2),speed/45,vy/15,yaw/2,curve,road],1)
+  obs=np.stack([np.sin(err),np.cos(err),np.clip(lateral/68,-2,2),speed/45,vy/15,yaw/2,curve,road,np.zeros(pop),np.zeros(pop)],1)
   hidden=np.tanh(np.einsum('pi,pih->ph',obs,W1)+b1)
   out=np.einsum('ph,pho->po',hidden,W2)+b2
   throttle=1/(1+np.exp(-out[:,0])); targetsteer=np.tanh(out[:,1]); drift=1/(1+np.exp(-out[:,2]))
@@ -84,7 +84,7 @@ def main():
  W1,b1,W2,b2=unpack(mean[None,:])
  samples=12000
  obs=rng.uniform(-1,1,(samples,OBS)); obs[:,1]=np.sqrt(np.maximum(0,1-obs[:,0]**2))
- obs[:,2]*=1.4; obs[:,3]=rng.uniform(0,1.25,samples); obs[:,4:6]*=.8; obs[:,6]*=.8; obs[:,7]=1
+ obs[:,2]*=1.4; obs[:,3]=rng.uniform(0,1.25,samples); obs[:,4:6]*=.8; obs[:,6]*=.8; obs[:,7]=1; obs[:,8:10]=0
  steer=np.clip(1.75*obs[:,0]-1.25*obs[:,2]-.28*obs[:,5]+1.4*obs[:,6],-.92,.92)
  desired_speed=np.clip(.92-1.15*np.abs(obs[:,6])-.34*np.abs(obs[:,0]),.25,.95)
  throttle=np.clip(2.8+7.0*(desired_speed-obs[:,3]),-5,5)

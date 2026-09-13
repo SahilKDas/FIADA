@@ -17,7 +17,7 @@ Complete a clockwise lap. Leaving the asphalt applies heavy drag and caps the ca
 
 ## Checkpoints and AI
 
-Laps use twenty-nine ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 8-12-3 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. Run `python scripts/train_policy.py` to retrain and export the 147 parameters.
+Laps use twenty-nine ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 10-12-3 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. The native trainer is authoritative; `python scripts/train_policy.py` can generate a procedural 171-parameter warm start.
 
 
 
@@ -32,11 +32,11 @@ cmake --build build-native-trainer --target FIADA_train
 ./build-native-trainer/FIADA_train.exe --evaluate ./assets/policy/fiada_policy.bin
 ```
 
-The current policy was retrained against the revised handling and punitive off-road physics on this 29-sector circuit. Native reward improved from 1602.08 to 3100.24; the frozen unseen holdout completed 21 of 33 laps with zero screen escapes, and the canonical grid run completed a lap. The model remains externally stored so training can continue without recompiling the game.
+The current policy observes drift charge and active boost and was retrained against the exact C++ physics. Native randomized reward improved from 1973.61 to 2339.49. The frozen holdout completed 24 of 33 laps with zero screen escapes, deliberately released 129 mini-turbos, spent 82.5 seconds drifting and 92.4 seconds boosted, and completed the canonical grid lap.
 
 ## Physics
 
-FIADA uses a compact nonlinear bicycle model: longitudinal/lateral velocity, yaw rate, control lag, slip-angle tire saturation, weight transfer, and a friction circle. Drifting reduces rear grip; only a sustained controlled slide charges a release-triggered mini-turbo. This stays cheap for batched neural-network episodes while making braking, counter-steer, racing lines, and boost timing meaningful.
+FIADA uses a compact nonlinear bicycle model: longitudinal/lateral velocity, yaw rate, control lag, slip-angle tire saturation, weight transfer, and a friction circle. Drifting gently reduces rear grip and adds a mild yaw assist; a controlled slide quickly charges a release-triggered mini-turbo. This stays cheap for batched neural-network episodes while making braking, counter-steer, racing lines, and boost timing meaningful.
 
 ## Build on Windows
 

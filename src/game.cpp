@@ -157,7 +157,7 @@ void Game::reset() {
   const auto startAhead = coursePoint(0, 0.05F);
   angle_ = std::atan2(startAhead.y() - y_, startAhead.x() - x_);
   velocityX_ = velocityY_ = yawRate_ = 0.0F;
-  throttle_ = brake_ = steer_ = driftCharge_ = turboTime_ = 0.0F;
+  throttle_ = brake_ = steer_ = driftCharge_ = turboTime_ = 0.0F; miniTurbos_ = 0;
   wasDrifting_ = false;
   cameraX_ = cameraY_ = 0.0F;
   previousX_ = x_;
@@ -172,7 +172,7 @@ bool Game::onRoad(float x, float y) const {
 
 
 
-std::array<float, 8> Game::observation() const {
+std::array<float, 10> Game::observation() const {
   const int nearest = nearestCourseSample(x_, y_);
   const int targetIndex = (nearest + 11) % kSampleCount;
   const auto currentRaw = courseSample(nearest);
@@ -191,7 +191,7 @@ std::array<float, 8> Game::observation() const {
   const float curve=std::atan2(tx*fy-ty*fx,tx*fx+ty*fy);
   return {std::sin(error),std::cos(error),std::clamp(lateral/76.0F,-2.0F,2.0F),
           velocityX_/45.0F,velocityY_/15.0F,yawRate_/2.0F,curve,
-          onRoad(x_,y_)?1.0F:0.0F};
+          onRoad(x_,y_)?1.0F:0.0F, driftCharge_, std::clamp(turboTime_/1.5F,0.0F,1.0F)};
 }
 
 void Game::beginTrainingEpisode(unsigned seed) {
@@ -239,7 +239,9 @@ Input Game::aiInput() const {
                    std::clamp(1.8F*observation[0]-1.25F*observation[2]+1.4F*observation[6]-0.3F*observation[5],-1.0F,1.0F),
                    std::clamp(0.18F+0.38F*std::max(std::abs(observation[0]),std::abs(observation[2])),0.18F,0.72F)),-1.0F,1.0F),
                .reset = false,
-               .drift = sigmoid(output[2]) > 0.62F, .toggleAi = false};
+               .drift = (sigmoid(output[2]) > 0.48F || (std::abs(observation[6]) > 0.13F && observation[3] > 0.30F)) &&
+                        observation[9] < 0.05F && observation[8] < 0.36F,
+               .toggleAi = false};
 }
 
 void Game::update(float dt, const Input& input) {
@@ -258,7 +260,7 @@ void Game::update(float dt, const Input& input) {
   const float surfaceGrip = (road ? 1.34F : 0.58F) * gripScale_;
   const float rolling = road ? 34.0F : 280.0F;
   const float gripF = surfaceGrip;
-  const float gripR = surfaceGrip * (control.drift ? 0.79F : 1.0F);
+  const float gripR = surfaceGrip * (control.drift ? 0.90F : 1.0F);
   const float throttleTarget = control.throttle;
   const float brakeTarget = control.brake;
   const float steerTarget = control.steer;
@@ -267,26 +269,26 @@ void Game::update(float dt, const Input& input) {
   steer_ += (steerTarget - steer_) * std::min(1.0F, 13.0F * dt);
 
   const float speedAbs = std::abs(velocityX_);
-  const float driftSteer = control.drift ? 1.12F : 1.0F;
+  const float driftSteer = control.drift ? 1.06F : 1.0F;
   const float steering = steer_ * driftSteer * 0.39F / (1.0F + speedAbs * 0.012F);
   const float safeSpeed = std::max(speedAbs, 2.5F);
   const float slipF = std::atan2(velocityY_ + frontAxle * yawRate_, safeSpeed) - steering;
   const float slipR = std::atan2(velocityY_ - rearAxle * yawRate_, safeSpeed);
 
   const float slipMagnitude = std::abs(slipR);
-  const bool validDrift = control.drift && road && speedAbs > 13.0F &&
-                          slipMagnitude > 0.08F && slipMagnitude < 0.72F;
+  const bool validDrift = control.drift && road && speedAbs > 9.0F &&
+                          slipMagnitude > 0.035F && slipMagnitude < 0.85F;
   if (validDrift)
-    driftCharge_ = std::min(1.0F, driftCharge_ + dt * (0.20F + slipMagnitude * 0.85F));
+    driftCharge_ = std::min(1.0F, driftCharge_ + dt * (0.48F + slipMagnitude * 1.10F));
   if (wasDrifting_ && !control.drift) {
-    if (driftCharge_ >= 0.22F) turboTime_ = 0.28F + driftCharge_ * 0.92F;
+    if (driftCharge_ >= 0.12F) { turboTime_ = 0.42F + driftCharge_ * 1.08F; ++miniTurbos_; }
     driftCharge_ = 0.0F;
   }
   if (!road) driftCharge_ = std::max(0.0F, driftCharge_ - dt * 0.75F);
   wasDrifting_ = control.drift;
   turboTime_ = std::max(0.0F, turboTime_ - dt);
 
-  const float turboForce = turboTime_ > 0.0F ? 4400.0F : 0.0F;
+  const float turboForce = turboTime_ > 0.0F ? 5200.0F : 0.0F;
   const float drive = throttle_ * 13800.0F / (1.0F + speedAbs / 48.0F) + turboForce;
   const float braking = brake_ * 10500.0F * (velocityX_ >= 0.0F ? 1.0F : -1.0F);
   const float requestedX = drive - braking;
@@ -320,9 +322,13 @@ void Game::update(float dt, const Input& input) {
   yawAccel += (kinematicYaw - yawRate_) * (1.0F - dynamicBlend) * 9.0F;
   velocityX_ = std::clamp(velocityX_ + accelX * dt, -18.0F, turboTime_ > 0.0F ? 72.0F : 62.0F);
   velocityY_ = std::clamp(velocityY_ + accelY * dt, -24.0F, 24.0F);
-  velocityY_ *= std::exp(-(control.drift ? 0.22F : 4.2F) * dt);
+  velocityY_ *= std::exp(-(control.drift ? 0.85F : 4.2F) * dt);
   yawRate_ = std::clamp(yawRate_ + yawAccel * dt, -2.5F, 2.5F);
-  if (!control.drift) {
+  if (control.drift) {
+    // Mild drift assist keeps slides controllable without removing counter-steer.
+    const float driftStability = 1.0F - std::exp(-2.4F * dt);
+    yawRate_ = std::lerp(yawRate_, kinematicYaw * 1.08F, driftStability);
+  } else {
     // Strong road-car stability: preserve the nonlinear tire model but converge
     // toward the predictable bicycle yaw response used by human steering.
     const float stability = 1.0F - std::exp(-6.5F * dt);
@@ -368,7 +374,7 @@ void Game::update(float dt, const Input& input) {
   progressDelta = std::clamp(progressDelta, -3, 12);
   progressSample_ = newProgress;
   trainingReward_ = progressDelta * 4.0F + std::max(velocityX_, 0.0F) * 0.006F -
-                    (road ? 0.0F : 1.25F);
+                    (road ? 0.0F : 1.25F) + (turboTime_ > 0.0F ? 0.055F : 0.0F);
   if (escaped) {
     if (trainingMode_) { trainingReward_ -= 90.0F; trainingTerminal_ = true; }
     else reset();

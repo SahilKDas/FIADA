@@ -31,7 +31,10 @@ class Game {
   [[nodiscard]] int laps() const { return laps_; }
   [[nodiscard]] int checkpoint() const { return checkpoint_; }
   void beginTrainingEpisode(unsigned seed);
-  [[nodiscard]] std::array<float, 8> observation() const;
+  [[nodiscard]] std::array<float, 10> observation() const;
+  [[nodiscard]] float driftCharge() const { return driftCharge_; }
+  [[nodiscard]] float turboTime() const { return turboTime_; }
+  [[nodiscard]] int miniTurbos() const { return miniTurbos_; }
   [[nodiscard]] float trainingReward() const { return trainingReward_; }
   [[nodiscard]] bool trainingTerminal() const { return trainingTerminal_; }
 
@@ -65,6 +68,7 @@ class Game {
   float bestLap_{};
   int laps_{};
   int checkpoint_{};
+  int miniTurbos_{};
   bool resetHeld_{};
   bool aiToggleHeld_{};
   bool aiEnabled_{};
@@ -75,7 +79,7 @@ class Game {
   int progressSample_{};
   bool trainingMode_{};
   bool trainingTerminal_{};
-  std::array<float, 147> policyWeights_{};
+  std::array<float, 171> policyWeights_{};
   sk_sp<SkImage> car_;
   sk_sp<SkImage> cone_;
 };
