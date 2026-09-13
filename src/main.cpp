@@ -76,6 +76,20 @@ bool down(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
 }  // namespace
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCommand) {
+  if (std::string_view(commandLine).find("--item-smoke") != std::string_view::npos) {
+    fiada::Game horn(false);horn.beginItemTrainingEpisode(1,12345);fiada::Input use{};use.useItem=true;horn.update(1.0F/120.0F,use);if(horn.itemUses()!=1)return 75;
+    fiada::Game rod(false);rod.beginItemTrainingEpisode(2,54321);rod.update(1.0F/120.0F,use);return rod.itemUses()==1&&rod.shortcutsTaken(2)==1?0:76;
+  }
+  if (std::string_view(commandLine).find("--lab-menu-smoke") != std::string_view::npos) {
+    fiada::Game game(true);fiada::Input in{};
+    in.confirm=true;game.update(1.0F/120.0F,in);in.confirm=false;game.update(1.0F/120.0F,in);
+    for(int i=0;i<2;++i){in.brake=1;game.update(1.0F/120.0F,in);in.brake=0;game.update(1.0F/120.0F,in);}
+    in.confirm=true;game.update(1.0F/120.0F,in);in.confirm=false;game.update(1.0F/120.0F,in);if(!game.labTrackSelection())return 72;
+    for(int i=0;i<2;++i){in.brake=1;game.update(1.0F/120.0F,in);in.brake=0;game.update(1.0F/120.0F,in);}
+    if(game.selectedTrack()!=2)return 73;
+    in.confirm=true;game.update(1.0F/120.0F,in);
+    return !game.inFrontEnd()&&game.labMode()&&game.selectedTrack()==2?0:74;
+  }
   if (std::string_view(commandLine).find("--menu-smoke") != std::string_view::npos) {
     fiada::Game game(true); if(!game.inFrontEnd())return 70;
     fiada::Input input{};input.confirm=true;game.update(1.0F/120.0F,input);input.confirm=false;game.update(1.0F/120.0F,input);
@@ -156,7 +170,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
       .drift = down(VK_SPACE) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_A)),
       .toggleAi = down('P'),
       .useItem = down(VK_LSHIFT) || down(VK_RSHIFT) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_X)),
-      .menu = down(VK_ESCAPE) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_B)),
+      .menu = down(VK_ESCAPE) || down(VK_BACK) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_B)),
       .confirm = down(VK_RETURN) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_A)),
       .next = down(VK_OEM_6) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER)),
       .previous = down(VK_OEM_4) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER)),

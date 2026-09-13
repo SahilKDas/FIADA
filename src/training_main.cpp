@@ -69,7 +69,7 @@ void learnHead(std::vector<float>& weights,int episodes,int seconds,float rate,u
   }
 }
 void learnItems(std::vector<float>& weights,int rounds,float rate){
-  for(int round=0;round<rounds;++round)for(int item=1;item<=3;++item){
+  for(int round=0;round<rounds;++round)for(int item=1;item<=2;++item){
     fiada::Game game(false);game.beginItemTrainingEpisode(item,810000U+round*101U+item);
     fiada::policy::State state{};
     // Balance the single edge-triggered item press against the many post-use frames.
@@ -84,7 +84,7 @@ void learnItems(std::vector<float>& weights,int rounds,float rate){
       const auto obs=game.observation();
       if((step&3)==0){
         std::array<float,fiada::policy::kDense> dense{};const auto prediction=fiada::policy::forward(obs,weights,state,&dense);const auto wanted=target(expert(obs));
-        for(int output=0;output<fiada::policy::kOutputs;++output){
+        for(int output=4;output<fiada::policy::kOutputs;++output){
           const float emphasis=output==4?18.0F:(output==2?2.5F:1.0F);const float error=emphasis*std::clamp(prediction[output]-wanted[output],-4.0F,4.0F);
           for(int d=0;d<fiada::policy::kDense;++d)weights[fiada::policy::kOutputOffset+d*fiada::policy::kOutputs+output]-=rate*error*dense[d];
           weights[fiada::policy::kOutputBiasOffset+output]-=rate*error;
@@ -105,20 +105,20 @@ Metrics evaluate(const std::vector<float>& weights,int episodes=33,int seconds=9
     for(int i=0;i<3;++i){m.itemTypes[i]+=game.itemPickups(i+1);m.cutTypes[i]+=game.shortcutsTaken(i+1);}if(game.laps()>0)m.laps.push_back(game.bestLap());
     if(episode==0)std::cout<<"canonical_lap="<<(game.laps()>0)<<" checkpoint="<<game.checkpoint()<<" lap_seconds="<<game.bestLap()<<"\n";
   }
-  // Three held-out capability trials guarantee every item-specific route is tested.
-  for(int item=1;item<=3;++item){
+  // Held-out capability trials verify both deterministic replacement items.
+  for(int item=1;item<=2;++item){
     fiada::Game game(false);game.beginItemTrainingEpisode(item,990000U+item*1777U);Controller controller;
     for(int step=0;step<20*120&&!game.trainingTerminal();++step)game.update(dt,controller.act(game.observation(),weights));
     m.uses+=game.itemUses();m.cuts+=game.shortcutsTaken();m.cutTypes[item-1]+=game.shortcutsTaken(item);
-    std::cout<<"item_trial="<<item<<" uses="<<game.itemUses()<<" shortcuts="<<game.shortcutsTaken(item)<<" checkpoint="<<game.checkpoint()<<"\n";
+    std::cout<<"item_trial="<<item<<" uses="<<game.itemUses()<<" offroad_cuts="<<game.shortcutsTaken(item)<<" checkpoint="<<game.checkpoint()<<"\n";
   }
   return m;
 }
 void print(const Metrics&m){
   auto laps=m.laps;std::sort(laps.begin(),laps.end());const float best=laps.empty()?0:laps.front(),median=laps.empty()?0:laps[laps.size()/2];
   std::cout<<"holdout_laps="<<m.completed<<"/33 terminal_escapes="<<m.terminals<<"/33 best_lap="<<best<<" median_lap="<<median<<" offroad_seconds="<<m.offroad
-           <<" mini_turbos="<<m.mini<<" item_pickups="<<m.pickups<<" item_uses="<<m.uses<<" shortcuts="<<m.cuts
-           <<" pickup_types="<<m.itemTypes[0]<<","<<m.itemTypes[1]<<","<<m.itemTypes[2]<<" shortcut_types="<<m.cutTypes[0]<<","<<m.cutTypes[1]<<","<<m.cutTypes[2]<<"\n";
+           <<" mini_turbos="<<m.mini<<" item_pickups="<<m.pickups<<" item_uses="<<m.uses<<" offroad_cuts="<<m.cuts
+           <<" pickup_types="<<m.itemTypes[0]<<","<<m.itemTypes[1]<<","<<m.itemTypes[2]<<" cut_types="<<m.cutTypes[0]<<","<<m.cutTypes[1]<<","<<m.cutTypes[2]<<"\n";
 }
 }
 int main(int argc,char**argv){

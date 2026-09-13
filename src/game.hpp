@@ -47,6 +47,8 @@ class Game {
   [[nodiscard]] bool inFrontEnd() const { return frontEnd_; }
   [[nodiscard]] bool championshipMode() const { return championshipMode_; }
   [[nodiscard]] bool labMode() const { return labMode_; }
+  [[nodiscard]] bool labTrackSelection() const { return labTrackSelect_; }
+  [[nodiscard]] int selectedTrack() const { return trackIndex_; }
   void beginTrainingEpisode(unsigned seed);
   void beginItemTrainingEpisode(int itemType, unsigned seed);
   [[nodiscard]] policy::Observation observation() const;
@@ -106,6 +108,7 @@ class Game {
   int itemUses_{};
   int shortcutsTaken_{};
   std::array<int,3> itemPickupsByType_{};
+  std::array<int,3> recentItems_{};
   std::array<int,3> shortcutsByType_{};
   int heldItem_{};
   int shortcutItem_{};
@@ -141,6 +144,7 @@ class Game {
   bool labMode_{};
   bool frontEnd_{};
   bool titlePage_{true};
+  bool labTrackSelect_{};
   bool confirmHeld_{};
   bool championshipMode_{};
   bool overlayHeld_{};

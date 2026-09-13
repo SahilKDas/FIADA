@@ -2,7 +2,7 @@
 
 **Facio Ludum Autocinetum et Doceo Cerebrum Computatri Currus Agere** — a Latin-inspired name for a racing game built to train a neural network to drive.
 
-FIADA is a top-down 2D racer with a gold-themed 35-sector circuit, deterministic items, item-specific shortcuts, and a recurrent neural driver rendered through Skia.
+FIADA is a top-down 2D racer with a gold-themed 35-sector circuit, deterministic Horn and Diamond-on-a-Rod items, player-chosen off-road cuts, and a recurrent neural driver rendered through Skia.
 
 ## Start and choose a mode
 
@@ -14,7 +14,7 @@ FIADA opens on a title screen. Press Enter or controller A, choose Quick Race, C
 - `S` / `Down`: brake and reverse
 - `A D` / arrow keys: steer
 - `Space`: hold to drift; release for a mini-turbo
-- `Shift`: use Diamond, Feather, or Gold Key
+- `Shift`: use Horn or Diamond on a Rod
 - `Tab`: hold for 2× simulation speed while spectating AI mode only
 - `P`: toggle the trained driver
 - `R`: reset
@@ -23,7 +23,7 @@ Off-road terrain applies heavy drag and caps speed near one-third road speed. Th
 
 ## Recurrent AI
 
-The external policy is a `32 → 768 recurrent → 512 → 5` controller with 1,011,461 float32 parameters (4,045,844 bytes). It sees four track-lookahead horizons, vehicle/slip state, inventory, drift/turbo state, shortcut direction, and lap phase. It outputs throttle, brake, steering, drift, and item use. Inference runs at 30 Hz while physics remains at 120 Hz. A small deterministic safety driver is used only when the external model is missing or invalid.
+The external policy is a `32 → 768 recurrent → 512 → 5` controller with 1,011,461 float32 parameters (4,045,844 bytes). It sees four track-lookahead horizons, vehicle/slip state, inventory, drift/turbo state, rival proximity, off-road need, and lap phase. It outputs throttle, brake, steering, drift, and item use. Inference runs at 30 Hz while physics remains at 120 Hz. A small deterministic safety driver is used only when the external model is missing or invalid.
 
 The dependency-free native trainer generates expert trajectories online, applies behavioral-cloning gradients, refines against randomized production simulation, and finishes with deterministic item curricula. It persists no dataset or optimizer checkpoints.
 
@@ -34,7 +34,7 @@ cmake --build build-native-trainer --target FIADA_train
 ./build-native-trainer/FIADA_train.exe --evaluate ./assets/policy/fiada_policy.bin
 ```
 
-Accepted evaluation: canonical lap completed in 45.019 seconds; 28/33 randomized races completed; 0/33 escaped; 15 mini-turbos; 57 pickups; 30 item uses; and Diamond, Feather, and Gold Key shortcut capability trials all passed. See `assets/policy/evaluation.json`.
+Accepted evaluation after item fine-tuning and guardrails: canonical lap in 45.928 seconds; 32/33 randomized races completed; 0/33 escaped; 15 mini-turbos; 46 pickups; 19 item uses; and direct activation tests pass for both new items. See `assets/policy/evaluation.json`.
 
 ## Deterministic items
 
@@ -56,8 +56,8 @@ Original SVG art is in `assets/svg`; Skia-ready PNGs are in `assets/png`.
 
 FIADA now stages eight-driver races: one player and seven deterministic rivals. The five profile slots emphasize aggression, defense, shortcuts, drift, and recovery. Drafting, contact impulses, live placement, a three-second grid countdown, deterministic rival items, and forward-camera racing run inside the same 120 Hz simulation.
 
-Five championship geometries are available with `[` and `]`: Gold Circuit, Alpine Switchbacks, Volcanic Foundry, Coastal Causeway, and Neon City. Press `C` for the championship presentation layer and `L` for the in-game AI Lab telemetry overlay. The Lab exposes policy inputs/outputs, a recurrent hidden-state summary, and the live rival tournament order without changing simulation state.
+Five championship geometries are available with `[` and `]`: Gold Circuit, Alpine Switchbacks, Volcanic Foundry, Coastal Causeway, and Neon City. AI Lab opens a five-track picker before launching; `L` toggles its telemetry overlay. The Lab exposes policy inputs/outputs, a recurrent hidden-state summary, and the live rival tournament order without changing simulation state.
 
-Xbox-compatible XInput controllers use the left stick to steer, triggers to accelerate/brake, `A` to drift, `X` to use an item, shoulder buttons to change circuit, Back for the Lab, and Start for championship mode. Keyboard control remains available. A redistributable CC0 engine loop and its provenance manifest live under `assets/audio`.
+Xbox-compatible XInput controllers use the left stick to steer, triggers to accelerate/brake, `A` to drift, `X` to use an item, shoulder buttons to change circuit, Back for the Lab. Escape, Backspace, or controller B returns to the menu. Keyboard control remains available. A redistributable CC0 engine loop and its provenance manifest live under `assets/audio`.
 
 Run `FIADA.exe --grand-prix-smoke` to replay five paired seeded simulations and verify deterministic hashes and valid eight-driver placement.

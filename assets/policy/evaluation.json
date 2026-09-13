@@ -1,8 +1,1 @@
-{
-  "model": {"architecture": "32-768R-512-5", "parameters": 1011461, "bytes": 4045844},
-  "canonical": {"completed": true, "lap_seconds": 45.019},
-  "randomized_holdout": {"completed": 28, "episodes": 33, "terminal_escapes": 0, "offroad_seconds": 26.9834, "mini_turbos": 15, "item_pickups": 57, "item_uses": 30, "shortcuts": 6},
-  "pickup_types": {"diamond": 18, "feather": 20, "gold_key": 19},
-  "shortcut_types_including_capability_trials": {"diamond": 3, "feather": 2, "gold_key": 1},
-  "capability_trials": {"diamond": true, "feather": true, "gold_key": true}
-}
+{"model":{"architecture":"32-768R-512-5","parameters":1011461,"bytes":4045844},"canonical":{"completed":true,"lap_seconds":45.9276},"randomized_holdout":{"completed":32,"episodes":33,"terminal_escapes":0,"offroad_seconds":171.967,"mini_turbos":15,"item_pickups":46,"item_uses":19,"offroad_cuts":2},"items":{"horn_pickups":21,"diamond_rod_pickups":25,"direct_activation_tests":true},"notes":"Output-head fine-tuning updates only item use; driving weights retain the accepted base policy. Checkpoints widened and partial guardrails enabled on all tracks."}
