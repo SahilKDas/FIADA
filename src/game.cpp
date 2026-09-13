@@ -131,6 +131,7 @@ void text(SkCanvas& canvas, std::string_view value, float x, float y,
 }  // namespace
 
 Game::Game(bool assets) {
+  reset();
   std::copy(policy::kWeights.begin(), policy::kWeights.end(), policyWeights_.begin());
   if (assets) loadAssets();
 }
@@ -267,7 +268,7 @@ void Game::update(float dt, const Input& input) {
 
   const float speedAbs = std::abs(velocityX_);
   const float driftSteer = control.drift ? 1.12F : 1.0F;
-  const float steering = steer_ * driftSteer * 0.42F / (1.0F + speedAbs * 0.022F);
+  const float steering = steer_ * driftSteer * 0.39F / (1.0F + speedAbs * 0.012F);
   const float safeSpeed = std::max(speedAbs, 2.5F);
   const float slipF = std::atan2(velocityY_ + frontAxle * yawRate_, safeSpeed) - steering;
   const float slipR = std::atan2(velocityY_ - rearAxle * yawRate_, safeSpeed);
@@ -319,8 +320,20 @@ void Game::update(float dt, const Input& input) {
   yawAccel += (kinematicYaw - yawRate_) * (1.0F - dynamicBlend) * 9.0F;
   velocityX_ = std::clamp(velocityX_ + accelX * dt, -18.0F, turboTime_ > 0.0F ? 72.0F : 62.0F);
   velocityY_ = std::clamp(velocityY_ + accelY * dt, -24.0F, 24.0F);
-  velocityY_ *= std::exp(-(control.drift ? 0.18F : 1.85F) * dt);
+  velocityY_ *= std::exp(-(control.drift ? 0.22F : 4.2F) * dt);
   yawRate_ = std::clamp(yawRate_ + yawAccel * dt, -2.5F, 2.5F);
+  if (!control.drift) {
+    // Strong road-car stability: preserve the nonlinear tire model but converge
+    // toward the predictable bicycle yaw response used by human steering.
+    const float stability = 1.0F - std::exp(-6.5F * dt);
+    yawRate_ = std::lerp(yawRate_, kinematicYaw, stability);
+  }
+  if (!road) {
+    // Grass/gravel is deliberately punitive: roughly one-third road top speed.
+    velocityX_ *= std::exp(-3.8F * dt);
+    velocityY_ *= std::exp(-5.0F * dt);
+    velocityX_ = std::clamp(velocityX_, -7.0F, 20.5F);
+  }
   if (control.throttle < 0.01F && control.brake < 0.01F && std::hypot(velocityX_, velocityY_) < 0.35F)
     velocityX_ = velocityY_ = yawRate_ = 0.0F;
 
@@ -333,7 +346,7 @@ void Game::update(float dt, const Input& input) {
 
   // Dead-zone camera: stationary inside the central box, follow near the track,
   // and never chase a car that has escaped the authored world.
-  const float zoom = std::clamp(0.96F - std::abs(velocityX_) / 270.0F, 0.72F, 0.96F);
+  const float zoom = std::clamp(1.30F - std::abs(velocityX_) / 420.0F, 1.08F, 1.30F);
   const float deadX = width_ * 0.19F / zoom;
   const float deadY = height_ * 0.17F / zoom;
   const bool insideFollowWorld = x_ > -850.0F && x_ < 850.0F &&
@@ -355,7 +368,7 @@ void Game::update(float dt, const Input& input) {
   progressDelta = std::clamp(progressDelta, -3, 12);
   progressSample_ = newProgress;
   trainingReward_ = progressDelta * 4.0F + std::max(velocityX_, 0.0F) * 0.006F -
-                    (road ? 0.0F : 0.28F);
+                    (road ? 0.0F : 1.25F);
   if (escaped) {
     if (trainingMode_) { trainingReward_ -= 90.0F; trainingTerminal_ = true; }
     else reset();
@@ -485,7 +498,7 @@ void Game::render(SkCanvas& canvas) {
   canvas.clear(SK_ColorBLACK);
   canvas.save();
   canvas.translate(width_ * 0.5F, height_ * 0.5F);
-  const float zoom = std::clamp(0.96F - std::abs(velocityX_) / 270.0F, 0.72F, 0.96F);
+  const float zoom = std::clamp(1.30F - std::abs(velocityX_) / 420.0F, 1.08F, 1.30F);
   canvas.scale(zoom, zoom);
   canvas.translate(-cameraX_, -cameraY_);
   drawTrack(canvas);

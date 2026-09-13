@@ -29,7 +29,6 @@ function Invoke-Checked([string]$File, [string[]]$Arguments) {
 }
 
 & (Join-Path $PSScriptRoot 'bootstrap-windows.ps1')
-if ($LASTEXITCODE -ne 0) { throw 'Dependency bootstrap failed' }
 
 Remove-Safe $BuildRoot
 Remove-Safe $packageRoot

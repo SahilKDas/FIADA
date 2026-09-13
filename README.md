@@ -13,7 +13,7 @@ FIADA is currently a playable top-down 2D racing prototype with a long, flowing,
 - `P`: toggle the trained reinforcement-learning driver
 - `R`: reset the car
 
-Complete a clockwise lap. Leaving the asphalt dramatically changes grip and rolling resistance. The camera uses a central dead zone and follows only within the authored circuit bounds; driving entirely off-screen resets the car.
+Complete a clockwise lap. Leaving the asphalt applies heavy drag and caps the car to roughly one-third of its road speed. The closer camera uses a central dead zone and follows only within the authored circuit bounds; driving entirely off-screen resets the car.
 
 ## Checkpoints and AI
 
@@ -32,7 +32,7 @@ cmake --build build-native-trainer --target FIADA_train
 ./build-native-trainer/FIADA_train.exe --evaluate ./assets/policy/fiada_policy.bin
 ```
 
-The current policy was retrained on this 29-sector circuit. Native reward improved from 707.11 to 1978.38; the frozen unseen holdout completed 8 of 33 laps with zero screen escapes, while the canonical grid run currently reaches checkpoint 2. The model remains an early checkpoint and is stored externally so training can continue without recompiling the game.
+The current policy was retrained against the revised handling and punitive off-road physics on this 29-sector circuit. Native reward improved from 1602.08 to 3100.24; the frozen unseen holdout completed 21 of 33 laps with zero screen escapes, and the canonical grid run completed a lap. The model remains externally stored so training can continue without recompiling the game.
 
 ## Physics
 
