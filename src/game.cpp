@@ -29,11 +29,15 @@ namespace fiada {
 namespace {
 constexpr float kPi = 3.14159265358979323846F;
 
-constexpr std::array<SkPoint, 12> kCourse{{
-    {-455, -205}, {-180, -310}, {115, -268}, {420, -145},
-    {505, 75}, {345, 270}, {80, 305}, {-75, 155},
-    {-330, 285}, {-535, 115}, {-390, -35}, {-225, -105},
+constexpr std::array<SkPoint, 18> kCourse{{
+    {-520, -300}, {-250, -430}, {40, -470}, {300, -400},
+    {520, -470}, {740, -300}, {650, -100}, {760, 100},
+    {650, 310}, {420, 430}, {180, 350}, {0, 480},
+    {-250, 430}, {-480, 350}, {-720, 200}, {-760, -20},
+    {-600, -180}, {-390, -110},
 }};
+constexpr int kSamplesPerSegment = 20;
+constexpr int kSampleCount = static_cast<int>(kCourse.size()) * kSamplesPerSegment;
 
 SkPoint coursePoint(int segment, float t) {
   const int n = static_cast<int>(kCourse.size());
@@ -53,18 +57,15 @@ SkPoint coursePoint(int segment, float t) {
 
 
 SkPoint courseSample(int index) {
-  constexpr int samplesPerSegment = 20;
-  constexpr int sampleCount = static_cast<int>(kCourse.size()) * samplesPerSegment;
-  index = (index % sampleCount + sampleCount) % sampleCount;
-  return coursePoint(index / samplesPerSegment,
-                     (index % samplesPerSegment) / static_cast<float>(samplesPerSegment));
+  index = (index % kSampleCount + kSampleCount) % kSampleCount;
+  return coursePoint(index / kSamplesPerSegment,
+                     (index % kSamplesPerSegment) / static_cast<float>(kSamplesPerSegment));
 }
 
 int nearestCourseSample(float x, float y) {
-  constexpr int sampleCount = static_cast<int>(kCourse.size()) * 20;
   int bestIndex = 0;
   float bestDistance = 1.0e30F;
-  for (int i = 0; i < sampleCount; ++i) {
+  for (int i = 0; i < kSampleCount; ++i) {
     const auto p = courseSample(i);
     const float distance = (p.x()-x)*(p.x()-x) + (p.y()-y)*(p.y()-y);
     if (distance < bestDistance) { bestDistance = distance; bestIndex = i; }
@@ -147,9 +148,10 @@ void Game::loadAssets() {
 }
 
 void Game::reset() {
-  x_ = -455.0F;
-  y_ = -205.0F;
-  angle_ = -0.27F;
+  x_ = kCourse[0].x();
+  y_ = kCourse[0].y();
+  const auto startAhead = coursePoint(0, 0.05F);
+  angle_ = std::atan2(startAhead.y() - y_, startAhead.x() - x_);
   velocityX_ = velocityY_ = yawRate_ = 0.0F;
   throttle_ = brake_ = steer_ = driftCharge_ = turboTime_ = 0.0F;
   wasDrifting_ = false;
@@ -167,9 +169,8 @@ bool Game::onRoad(float x, float y) const {
 
 
 std::array<float, 8> Game::observation() const {
-  constexpr int sampleCount = static_cast<int>(kCourse.size()) * 20;
   const int nearest = nearestCourseSample(x_, y_);
-  const int targetIndex = (nearest + 14) % sampleCount;
+  const int targetIndex = (nearest + 18) % kSampleCount;
   const auto currentRaw = courseSample(nearest);
   const auto next = courseSample(nearest + 1);
   const auto targetRaw = courseSample(targetIndex);
@@ -193,7 +194,7 @@ void Game::beginTrainingEpisode(unsigned seed) {
   reset(); trainingMode_=true; trainingTerminal_=false; laps_=0;
   if (seed == 0) { progressSample_=0; gripScale_=1.0F; racingLineOffset_=0.0F; return; }
   std::mt19937 random(seed);
-  std::uniform_int_distribution<int> sampleDistribution(0,239);
+  std::uniform_int_distribution<int> sampleDistribution(0,kSampleCount-1);
   std::uniform_real_distribution<float> lateral(-42.0F,42.0F), heading(-0.24F,0.24F);
   std::uniform_real_distribution<float> speed(4.0F,24.0F), grip(0.78F,1.18F), line(-32.0F,32.0F);
   progressSample_=sampleDistribution(random);
@@ -202,7 +203,7 @@ void Game::beginTrainingEpisode(unsigned seed) {
   const float offset=lateral(random);x_=point.x()-ty*offset;y_=point.y()+tx*offset;
   angle_=std::atan2(ty,tx)+heading(random);velocityX_=speed(random);
   gripScale_=grip(random);racingLineOffset_=line(random);
-  checkpoint_=(progressSample_/20+1)%static_cast<int>(kCourse.size());
+  checkpoint_=(progressSample_/kSamplesPerSegment+1)%static_cast<int>(kCourse.size());
   previousX_=x_;previousY_=y_;cameraX_=x_;cameraY_=y_;
 }
 
@@ -332,22 +333,22 @@ void Game::update(float dt, const Input& input) {
   const float zoom = std::clamp(0.96F - std::abs(velocityX_) / 270.0F, 0.72F, 0.96F);
   const float deadX = width_ * 0.19F / zoom;
   const float deadY = height_ * 0.17F / zoom;
-  const bool insideFollowWorld = x_ > -650.0F && x_ < 620.0F &&
-                                 y_ > -390.0F && y_ < 390.0F;
+  const bool insideFollowWorld = x_ > -850.0F && x_ < 850.0F &&
+                                 y_ > -560.0F && y_ < 560.0F;
   if (insideFollowWorld) {
     if (x_ - cameraX_ > deadX) cameraX_ = x_ - deadX;
     if (x_ - cameraX_ < -deadX) cameraX_ = x_ + deadX;
     if (y_ - cameraY_ > deadY) cameraY_ = y_ - deadY;
     if (y_ - cameraY_ < -deadY) cameraY_ = y_ + deadY;
-    cameraX_ = std::clamp(cameraX_, -255.0F, 255.0F);
-    cameraY_ = std::clamp(cameraY_, -145.0F, 145.0F);
+    cameraX_ = std::clamp(cameraX_, -510.0F, 510.0F);
+    cameraY_ = std::clamp(cameraY_, -330.0F, 330.0F);
   }
   const float screenX = width_ * 0.5F + (x_ - cameraX_) * zoom;
   const float screenY = height_ * 0.5F + (y_ - cameraY_) * zoom;
   const bool escaped = screenX < -38.0F || screenX > width_ + 38.0F ||
                        screenY < -38.0F || screenY > height_ + 38.0F;
   const int newProgress = nearestCourseSample(x_, y_);
-  int progressDelta = (newProgress - progressSample_ + 120) % 240 - 120;
+  int progressDelta = (newProgress - progressSample_ + kSampleCount/2) % kSampleCount - kSampleCount/2;
   progressDelta = std::clamp(progressDelta, -3, 12);
   progressSample_ = newProgress;
   trainingReward_ = progressDelta * 4.0F + std::max(velocityX_, 0.0F) * 0.006F -
@@ -396,8 +397,8 @@ void Game::drawTrack(SkCanvas& canvas) const {
 
   // Subtle gold terrain bands frame the circuit without competing with it.
   paint.setColor(SkColorSetRGB(25, 25, 22));
-  for (int x = -1100; x < 1100; x += 110)
-    canvas.drawRect(SkRect::MakeXYWH(x, -700, 54, 1400), paint);
+  for (int x = -1400; x < 1400; x += 110)
+    canvas.drawRect(SkRect::MakeXYWH(x, -850, 54, 1700), paint);
 
   const SkPath course = coursePath();
   SkPaint stroke;
@@ -425,8 +426,9 @@ void Game::drawTrack(SkCanvas& canvas) const {
 
   // Start line, rotated to the local spline normal.
   canvas.save();
-  canvas.translate(-455, -205);
-  canvas.rotate(-15.5F);
+  canvas.translate(kCourse[0].x(), kCourse[0].y());
+  const auto startDirection = coursePoint(0, 0.05F);
+  canvas.rotate(std::atan2(startDirection.y()-kCourse[0].y(), startDirection.x()-kCourse[0].x()) * 180.0F / kPi);
   constexpr float tile = 10.0F;
   for (int row = 0; row < 15; ++row)
     for (int col = 0; col < 3; ++col) {
@@ -436,7 +438,7 @@ void Game::drawTrack(SkCanvas& canvas) const {
   canvas.restore();
 
   if (cone_) {
-    for (int i = 2; i < 12; i += 2) {
+    for (int i = 2; i < static_cast<int>(kCourse.size()); i += 2) {
       const SkPoint c = kCourse[i];
       canvas.drawImageRect(cone_, SkRect::MakeXYWH(c.x() - 12, c.y() - 16, 24, 32),
                            SkSamplingOptions(SkFilterMode::kLinear), nullptr);
@@ -470,7 +472,7 @@ void Game::drawHud(SkCanvas& canvas) const {
   const auto best = bestLap_ > 0.0F ? std::format("BEST   {:05.2f}s", bestLap_) : "BEST   --.--s";
   text(canvas, best, 42, 136, 16, SkColorSetRGB(166, 184, 205));
   const auto turbo = std::format("DRIFT  {:03.0f}%{}", driftCharge_ * 100.0F, turboTime_ > 0.0F ? "  TURBO!" : "");
-  text(canvas, std::format("CHECKPOINT  {:02}/12", checkpoint_), 174, 136, 14, SkColorSetRGB(166, 184, 205));
+  text(canvas, std::format("CHECKPOINT  {:02}/{}", checkpoint_, kCourse.size()), 174, 136, 14, SkColorSetRGB(166, 184, 205));
   text(canvas, turbo, 42, 160, 16, turboTime_ > 0.0F ? SkColorSetRGB(64, 224, 255) : SkColorSetRGB(255, 174, 62));
   text(canvas, "WASD / ARROWS DRIVE   HOLD SPACE TO DRIFT   P TOGGLE AI   R RESET", 24, height_ - 24.0F, 15,
        SkColorSetARGB(220, 255, 255, 255));

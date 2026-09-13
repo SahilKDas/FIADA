@@ -2,7 +2,7 @@
 
 **Facio Ludum Autocinetum et Doceo Cerebrum Computatri Currus Agere** — a Latin-inspired name for a racing game built to train a neural network to drive.
 
-FIADA is currently a playable top-down 2D racing prototype with a flowing, gold-themed technical circuit rendered entirely with [Skia](https://skia.org/). Its small deterministic game core is intended to grow into a neural-network training environment.
+FIADA is currently a playable top-down 2D racing prototype with a long, flowing, gold-themed 18-sector technical circuit rendered entirely with [Skia](https://skia.org/). Its small deterministic game core is intended to grow into a neural-network training environment.
 
 ## Play
 
@@ -17,7 +17,7 @@ Complete a clockwise lap. Leaving the asphalt dramatically changes grip and roll
 
 ## Checkpoints and AI
 
-Laps use twelve ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 8-12-3 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. Run `python scripts/train_policy.py` to retrain and export the 147 parameters.
+Laps use eighteen ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 8-12-3 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. Run `python scripts/train_policy.py` to retrain and export the 147 parameters.
 
 
 
@@ -32,7 +32,7 @@ cmake --build build-native-trainer --target FIADA_train
 ./build-native-trainer/FIADA_train.exe --evaluate ./assets/policy/fiada_policy.bin
 ```
 
-The current compact policy is an early checkpoint, not a solved agent: its frozen native holdout completed 3 of 33 laps, with canonical progress reaching checkpoint 8. The external binary is loaded at runtime so training can continue without recompiling the game.
+The current compact policy is an early checkpoint, not a solved agent: on the expanded 18-sector circuit its frozen native baseline completed 1 of 33 holdout laps, reached checkpoint 4 canonically, and escaped the screen in 1 of 33 episodes. The external binary is loaded at runtime so training can continue without recompiling the game.
 
 ## Physics
 

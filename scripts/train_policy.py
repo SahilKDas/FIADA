@@ -4,13 +4,14 @@ import argparse, json
 from pathlib import Path
 import numpy as np
 
-CONTROL=np.array([[-455,-205],[-180,-310],[115,-268],[420,-145],[505,75],[345,270],
- [80,305],[-75,155],[-330,285],[-535,115],[-390,-35],[-225,-105]],dtype=np.float64)
+CONTROL=np.array([[-520,-300],[-250,-430],[40,-470],[300,-400],[520,-470],[740,-300],
+ [650,-100],[760,100],[650,310],[420,430],[180,350],[0,480],[-250,430],
+ [-480,350],[-720,200],[-760,-20],[-600,-180],[-390,-110]],dtype=np.float64)
 def catmull(p0,p1,p2,p3,t):
  t2=t*t;t3=t2*t
  return .5*((2*p1)+(-p0+p2)*t+(2*p0-5*p1+4*p2-p3)*t2+(-p0+3*p1-3*p2+p3)*t3)
-COURSE=np.vstack([catmull(CONTROL[(i-1)%12],CONTROL[i],CONTROL[(i+1)%12],CONTROL[(i+2)%12],t)
- for i in range(12) for t in np.linspace(0,1,20,endpoint=False)])
+COURSE=np.vstack([catmull(CONTROL[(i-1)%len(CONTROL)],CONTROL[i],CONTROL[(i+1)%len(CONTROL)],CONTROL[(i+2)%len(CONTROL)],t)
+ for i in range(len(CONTROL)) for t in np.linspace(0,1,20,endpoint=False)])
 TANG=np.roll(COURSE,-1,axis=0)-COURSE
 TANG/=np.linalg.norm(TANG,axis=1,keepdims=True)
 N=len(COURSE); OBS=8; H=12; OUT=3; PARAMS=OBS*H+H+H*OUT+OUT
