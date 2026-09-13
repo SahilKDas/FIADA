@@ -6,9 +6,9 @@
 #include <string>
 
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkImage.h"
 
 class SkCanvas;
-class SkImage;
 
 namespace fiada {
 
@@ -23,13 +23,17 @@ struct Input {
 
 class Game {
  public:
-  Game();
+  explicit Game(bool loadAssets = true);
   void resize(int width, int height);
   void update(float dt, const Input& input);
   void render(SkCanvas& canvas);
   void enableAi() { aiEnabled_ = true; }
   [[nodiscard]] int laps() const { return laps_; }
   [[nodiscard]] int checkpoint() const { return checkpoint_; }
+  void beginTrainingEpisode(unsigned seed);
+  [[nodiscard]] std::array<float, 8> observation() const;
+  [[nodiscard]] float trainingReward() const { return trainingReward_; }
+  [[nodiscard]] bool trainingTerminal() const { return trainingTerminal_; }
 
  private:
   void reset();
@@ -65,6 +69,13 @@ class Game {
   bool aiToggleHeld_{};
   bool aiEnabled_{};
   float previousY_{-205.0F};
+  float gripScale_{1.0F};
+  float racingLineOffset_{};
+  float trainingReward_{};
+  int progressSample_{};
+  bool trainingMode_{};
+  bool trainingTerminal_{};
+  std::array<float, 147> policyWeights_{};
   sk_sp<SkImage> car_;
   sk_sp<SkImage> cone_;
 };

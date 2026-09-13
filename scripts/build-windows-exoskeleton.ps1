@@ -48,6 +48,7 @@ Copy-Item -LiteralPath (Join-Path $BuildRoot 'FIADA.exe') -Destination $packageR
 $assetRoot = Join-Path $packageRoot 'assets'
 New-Item -ItemType Directory -Force $assetRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\png') -Destination $assetRoot -Recurse
+Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\policy') -Destination $assetRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging\WINDOWS-X64-EXOSKELETON.md') -Destination (Join-Path $packageRoot 'README.md')
 
 $licenseRoot = Join-Path $packageRoot 'licenses'

@@ -19,6 +19,21 @@ Complete a clockwise lap. Leaving the asphalt dramatically changes grip and roll
 
 Laps use twelve ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 8-12-3 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. Run `python scripts/train_policy.py` to retrain and export the 147 parameters.
 
+
+
+### Native reinforcement training
+
+The production trainer links the same `game.cpp` as FIADA and advances the exact nonlinear physics at 120 Hz. Its curriculum begins at the canonical grid, then randomizes course spawn, heading, initial speed, tire grip, and desired racing-line offset. Off-screen exits terminate the episode with a penalty.
+
+```powershell
+cmake -S . -B build-native-trainer -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-native-trainer --target FIADA_train
+./build-native-trainer/FIADA_train.exe ./assets/policy/fiada_policy.bin
+./build-native-trainer/FIADA_train.exe --evaluate ./assets/policy/fiada_policy.bin
+```
+
+The current compact policy is an early checkpoint, not a solved agent: its frozen native holdout completed 3 of 33 laps, with canonical progress reaching checkpoint 8. The external binary is loaded at runtime so training can continue without recompiling the game.
+
 ## Physics
 
 FIADA uses a compact nonlinear bicycle model: longitudinal/lateral velocity, yaw rate, control lag, slip-angle tire saturation, weight transfer, and a friction circle. Drifting reduces rear grip; only a sustained controlled slide charges a release-triggered mini-turbo. This stays cheap for batched neural-network episodes while making braking, counter-steer, racing lines, and boost timing meaningful.

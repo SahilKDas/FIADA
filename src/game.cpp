@@ -20,6 +20,8 @@
 #include <cmath>
 #include <filesystem>
 #include <format>
+#include <fstream>
+#include <random>
 
 #include <windows.h>
 
@@ -124,7 +126,10 @@ void text(SkCanvas& canvas, std::string_view value, float x, float y,
 }
 }  // namespace
 
-Game::Game() { loadAssets(); }
+Game::Game(bool assets) {
+  std::copy(policy::kWeights.begin(), policy::kWeights.end(), policyWeights_.begin());
+  if (assets) loadAssets();
+}
 
 void Game::resize(int width, int height) {
   width_ = std::max(width, 1);
@@ -137,6 +142,8 @@ void Game::loadAssets() {
   const auto root = std::filesystem::path(std::wstring(module.data(), length)).parent_path();
   car_ = loadPng(root / "assets/png/player_car.png");
   cone_ = loadPng(root / "assets/png/cone.png");
+  std::ifstream model(root / "assets/policy/fiada_policy.bin", std::ios::binary);
+  if (model) model.read(reinterpret_cast<char*>(policyWeights_.data()), sizeof(policyWeights_));
 }
 
 void Game::reset() {
@@ -158,46 +165,81 @@ bool Game::onRoad(float x, float y) const {
 }
 
 
-Input Game::aiInput() const {
+
+std::array<float, 8> Game::observation() const {
   constexpr int sampleCount = static_cast<int>(kCourse.size()) * 20;
   const int nearest = nearestCourseSample(x_, y_);
   const int targetIndex = (nearest + 14) % sampleCount;
-  const auto current = courseSample(nearest);
+  const auto currentRaw = courseSample(nearest);
   const auto next = courseSample(nearest + 1);
-  const auto target = courseSample(targetIndex);
+  const auto targetRaw = courseSample(targetIndex);
   const auto futureNext = courseSample(targetIndex + 1);
-  float tx = next.x() - current.x(), ty = next.y() - current.y();
-  float fx = futureNext.x() - target.x(), fy = futureNext.y() - target.y();
-  const float tl = std::hypot(tx, ty), fl = std::hypot(fx, fy);
-  tx /= tl; ty /= tl; fx /= fl; fy /= fl;
-  const float desired = std::atan2(target.y() - y_, target.x() - x_);
-  const float error = wrapAngle(desired - angle_);
-  const float lateral = (x_ - current.x()) * -ty + (y_ - current.y()) * tx;
-  const float curve = std::atan2(tx * fy - ty * fx, tx * fx + ty * fy);
-  const std::array<float, policy::kObservations> observation{
-      std::sin(error), std::cos(error), std::clamp(lateral / 76.0F, -2.0F, 2.0F),
-      velocityX_ / 45.0F, velocityY_ / 15.0F, yawRate_ / 2.0F, curve,
-      onRoad(x_, y_) ? 1.0F : 0.0F};
+  float tx = next.x()-currentRaw.x(), ty = next.y()-currentRaw.y();
+  float fx = futureNext.x()-targetRaw.x(), fy = futureNext.y()-targetRaw.y();
+  const float tl=std::hypot(tx,ty), fl=std::hypot(fx,fy);
+  tx/=tl;ty/=tl;fx/=fl;fy/=fl;
+  const SkPoint current{currentRaw.x()-ty*racingLineOffset_,currentRaw.y()+tx*racingLineOffset_};
+  const SkPoint target{targetRaw.x()-fy*racingLineOffset_,targetRaw.y()+fx*racingLineOffset_};
+  const float desired=std::atan2(target.y()-y_,target.x()-x_);
+  const float error=wrapAngle(desired-angle_);
+  const float lateral=(x_-current.x())*-ty+(y_-current.y())*tx;
+  const float curve=std::atan2(tx*fy-ty*fx,tx*fx+ty*fy);
+  return {std::sin(error),std::cos(error),std::clamp(lateral/76.0F,-2.0F,2.0F),
+          velocityX_/45.0F,velocityY_/15.0F,yawRate_/2.0F,curve,
+          onRoad(x_,y_)?1.0F:0.0F};
+}
+
+void Game::beginTrainingEpisode(unsigned seed) {
+  reset(); trainingMode_=true; trainingTerminal_=false; laps_=0;
+  if (seed == 0) { progressSample_=0; gripScale_=1.0F; racingLineOffset_=0.0F; return; }
+  std::mt19937 random(seed);
+  std::uniform_int_distribution<int> sampleDistribution(0,239);
+  std::uniform_real_distribution<float> lateral(-42.0F,42.0F), heading(-0.24F,0.24F);
+  std::uniform_real_distribution<float> speed(4.0F,24.0F), grip(0.78F,1.18F), line(-32.0F,32.0F);
+  progressSample_=sampleDistribution(random);
+  const auto point=courseSample(progressSample_), next=courseSample(progressSample_+1);
+  float tx=next.x()-point.x(),ty=next.y()-point.y();const float length=std::hypot(tx,ty);tx/=length;ty/=length;
+  const float offset=lateral(random);x_=point.x()-ty*offset;y_=point.y()+tx*offset;
+  angle_=std::atan2(ty,tx)+heading(random);velocityX_=speed(random);
+  gripScale_=grip(random);racingLineOffset_=line(random);
+  checkpoint_=(progressSample_/20+1)%static_cast<int>(kCourse.size());
+  previousX_=x_;previousY_=y_;cameraX_=x_;cameraY_=y_;
+}
+
+Input Game::aiInput() const {
+  const auto observation = this->observation();
 
   std::array<float, policy::kHidden> hidden{};
   std::size_t cursor = 0;
   for (int i = 0; i < policy::kObservations; ++i)
     for (int h = 0; h < policy::kHidden; ++h)
-      hidden[h] += observation[i] * policy::kWeights[cursor++];
-  for (float& value : hidden) value = std::tanh(value + policy::kWeights[cursor++]);
+      hidden[h] += observation[i] * policyWeights_[cursor++];
+  for (float& value : hidden) value = std::tanh(value + policyWeights_[cursor++]);
   std::array<float, policy::kOutputs> output{};
   for (int h = 0; h < policy::kHidden; ++h)
     for (int o = 0; o < policy::kOutputs; ++o)
-      output[o] += hidden[h] * policy::kWeights[cursor++];
-  for (float& value : output) value += policy::kWeights[cursor++];
+      output[o] += hidden[h] * policyWeights_[cursor++];
+  for (float& value : output) value += policyWeights_[cursor++];
 
-  return Input{.throttle = sigmoid(output[0]), .brake = 0.0F,
-               .steer = std::tanh(output[1]), .reset = false,
+  float longitudinal = std::tanh(output[0]);
+  const float desiredSpeed = 7.0F + 43.0F * std::exp(-5.2F * std::abs(observation[6]))
+                           - 5.0F * std::min(std::abs(observation[2]), 1.0F);
+  if (velocityX_ > desiredSpeed)
+    longitudinal = -std::clamp((velocityX_ - desiredSpeed) / 12.0F, 0.25F, 1.0F);
+  else if (std::abs(observation[2]) > 0.82F)
+    longitudinal = std::min(longitudinal, 0.35F);
+  return Input{.throttle = std::max(longitudinal, 0.0F),
+               .brake = std::max(-longitudinal, 0.0F),
+               .steer = std::clamp(std::lerp(std::tanh(output[1]),
+                   std::clamp(1.8F*observation[0]-1.25F*observation[2]+1.4F*observation[6]-0.3F*observation[5],-1.0F,1.0F),
+                   std::clamp(0.18F+0.38F*std::max(std::abs(observation[0]),std::abs(observation[2])),0.18F,0.72F)),-1.0F,1.0F),
+               .reset = false,
                .drift = sigmoid(output[2]) > 0.62F, .toggleAi = false};
 }
 
 void Game::update(float dt, const Input& input) {
   dt = std::min(dt, 0.05F);
+  trainingReward_ = 0.0F;
   if (input.toggleAi && !aiToggleHeld_) aiEnabled_ = !aiEnabled_;
   aiToggleHeld_ = input.toggleAi;
   if (input.reset && !resetHeld_) reset();
@@ -208,7 +250,7 @@ void Game::update(float dt, const Input& input) {
   constexpr float mass = 1180.0F, inertia = 1760.0F;
   constexpr float frontAxle = 1.18F, rearAxle = 1.42F, gravity = 9.81F;
   const bool road = onRoad(x_, y_);
-  const float surfaceGrip = road ? 1.34F : 0.58F;
+  const float surfaceGrip = (road ? 1.34F : 0.58F) * gripScale_;
   const float rolling = road ? 34.0F : 280.0F;
   const float gripF = surfaceGrip;
   const float gripR = surfaceGrip * (control.drift ? 0.79F : 1.0F);
@@ -302,9 +344,17 @@ void Game::update(float dt, const Input& input) {
   }
   const float screenX = width_ * 0.5F + (x_ - cameraX_) * zoom;
   const float screenY = height_ * 0.5F + (y_ - cameraY_) * zoom;
-  if (screenX < -38.0F || screenX > width_ + 38.0F ||
-      screenY < -38.0F || screenY > height_ + 38.0F) {
-    reset();
+  const bool escaped = screenX < -38.0F || screenX > width_ + 38.0F ||
+                       screenY < -38.0F || screenY > height_ + 38.0F;
+  const int newProgress = nearestCourseSample(x_, y_);
+  int progressDelta = (newProgress - progressSample_ + 120) % 240 - 120;
+  progressDelta = std::clamp(progressDelta, -3, 12);
+  progressSample_ = newProgress;
+  trainingReward_ = progressDelta * 4.0F + std::max(velocityX_, 0.0F) * 0.006F -
+                    (road ? 0.0F : 0.28F);
+  if (escaped) {
+    if (trainingMode_) { trainingReward_ -= 90.0F; trainingTerminal_ = true; }
+    else reset();
     return;
   }
 
@@ -328,10 +378,12 @@ void Game::update(float dt, const Input& input) {
   if (previousSide < 0.0F && currentSide >= 0.0F &&
       acrossGate < 88.0F && movingForward) {
     checkpoint_ = (checkpoint_ + 1) % static_cast<int>(kCourse.size());
+    if (trainingMode_) trainingReward_ += 35.0F;
     if (checkpoint_ == 1) {
       ++laps_;
       if (bestLap_ == 0.0F || lapTime_ < bestLap_) bestLap_ = lapTime_;
       lapTime_ = 0.0F;
+      if (trainingMode_) trainingReward_ += 500.0F;
     }
   }
 }
