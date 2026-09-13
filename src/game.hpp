@@ -4,9 +4,11 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkImage.h"
+#include "neural_policy.hpp"
 
 class SkCanvas;
 
@@ -33,13 +35,19 @@ class Game {
   [[nodiscard]] int laps() const { return laps_; }
   [[nodiscard]] int checkpoint() const { return checkpoint_; }
   void beginTrainingEpisode(unsigned seed);
-  [[nodiscard]] std::array<float, 14> observation() const;
+  void beginItemTrainingEpisode(int itemType, unsigned seed);
+  [[nodiscard]] policy::Observation observation() const;
   [[nodiscard]] float driftCharge() const { return driftCharge_; }
   [[nodiscard]] float turboTime() const { return turboTime_; }
   [[nodiscard]] int miniTurbos() const { return miniTurbos_; }
   [[nodiscard]] int itemPickups() const { return itemPickups_; }
   [[nodiscard]] int itemUses() const { return itemUses_; }
   [[nodiscard]] int shortcutsTaken() const { return shortcutsTaken_; }
+  [[nodiscard]] float lapTime() const { return lapTime_; }
+  [[nodiscard]] float bestLap() const { return bestLap_; }
+  [[nodiscard]] float offroadTime() const { return offroadTime_; }
+  [[nodiscard]] int itemPickups(int type) const { return type >= 1 && type <= 3 ? itemPickupsByType_[type-1] : 0; }
+  [[nodiscard]] int shortcutsTaken(int type) const { return type >= 1 && type <= 3 ? shortcutsByType_[type-1] : 0; }
   [[nodiscard]] float trainingReward() const { return trainingReward_; }
   [[nodiscard]] bool trainingTerminal() const { return trainingTerminal_; }
 
@@ -51,7 +59,7 @@ class Game {
   void drawTrack(SkCanvas& canvas) const;
   void drawHud(SkCanvas& canvas) const;
   void drawCar(SkCanvas& canvas) const;
-  Input aiInput() const;
+  Input aiInput();
 
   int width_{1280};
   int height_{720};
@@ -78,11 +86,14 @@ class Game {
   int itemPickups_{};
   int itemUses_{};
   int shortcutsTaken_{};
+  std::array<int,3> itemPickupsByType_{};
+  std::array<int,3> shortcutsByType_{};
   int heldItem_{};
   int shortcutItem_{};
   int lastItemBox_{-1};
   unsigned long long simulationTick_{};
   float itemEffectTime_{};
+  float offroadTime_{};
   bool itemUseHeld_{};
   bool shortcutCounted_{};
   bool resetHeld_{};
@@ -95,7 +106,10 @@ class Game {
   int progressSample_{};
   bool trainingMode_{};
   bool trainingTerminal_{};
-  std::array<float, 232> policyWeights_{};
+  std::vector<float> policyWeights_;
+  policy::State policyState_{};
+  policy::Output cachedPolicyOutput_{};
+  int policyTick_{};
   sk_sp<SkImage> car_;
   sk_sp<SkImage> cone_;
 };

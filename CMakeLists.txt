@@ -23,7 +23,7 @@ foreach(codec libjpeg.a libpng16.a libwebpdemux.a libwebpmux.a libwebp.a libshar
   endif()
 endforeach()
 
-add_executable(FIADA WIN32 src/main.cpp src/game.cpp src/game.hpp src/trained_policy.hpp)
+add_executable(FIADA WIN32 src/main.cpp src/game.cpp src/game.hpp src/neural_policy.cpp src/neural_policy.hpp)
 target_include_directories(FIADA PRIVATE "${SKIA_ROOT}/include/skia")
 target_compile_definitions(FIADA PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_compile_options(FIADA PRIVATE
@@ -43,7 +43,7 @@ target_link_libraries(FIADA PRIVATE
   "${FIADA_STATIC_ROOT}/lib/libzs.a"
   gdi32 user32 comdlg32 shell32 ole32 oleaut32 uuid usp10 opengl32 bcrypt)
 
-add_executable(FIADA_train src/training_main.cpp src/game.cpp src/game.hpp src/trained_policy.hpp)
+add_executable(FIADA_train src/training_main.cpp src/game.cpp src/game.hpp src/neural_policy.cpp src/neural_policy.hpp)
 target_include_directories(FIADA_train PRIVATE "${SKIA_ROOT}/include/skia")
 target_compile_definitions(FIADA_train PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_compile_options(FIADA_train PRIVATE -std=c++2c -O3)
