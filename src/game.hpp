@@ -19,6 +19,7 @@ struct Input {
   bool reset{};
   bool drift{};
   bool toggleAi{};
+  bool useItem{};
 };
 
 class Game {
@@ -31,16 +32,20 @@ class Game {
   [[nodiscard]] int laps() const { return laps_; }
   [[nodiscard]] int checkpoint() const { return checkpoint_; }
   void beginTrainingEpisode(unsigned seed);
-  [[nodiscard]] std::array<float, 10> observation() const;
+  [[nodiscard]] std::array<float, 14> observation() const;
   [[nodiscard]] float driftCharge() const { return driftCharge_; }
   [[nodiscard]] float turboTime() const { return turboTime_; }
   [[nodiscard]] int miniTurbos() const { return miniTurbos_; }
+  [[nodiscard]] int itemPickups() const { return itemPickups_; }
+  [[nodiscard]] int itemUses() const { return itemUses_; }
+  [[nodiscard]] int shortcutsTaken() const { return shortcutsTaken_; }
   [[nodiscard]] float trainingReward() const { return trainingReward_; }
   [[nodiscard]] bool trainingTerminal() const { return trainingTerminal_; }
 
  private:
   void reset();
   bool onRoad(float x, float y) const;
+  void updateItems(const Input& control);
   void loadAssets();
   void drawTrack(SkCanvas& canvas) const;
   void drawHud(SkCanvas& canvas) const;
@@ -69,6 +74,16 @@ class Game {
   int laps_{};
   int checkpoint_{};
   int miniTurbos_{};
+  int itemPickups_{};
+  int itemUses_{};
+  int shortcutsTaken_{};
+  int heldItem_{};
+  int shortcutItem_{};
+  int lastItemBox_{-1};
+  unsigned long long simulationTick_{};
+  float itemEffectTime_{};
+  bool itemUseHeld_{};
+  bool shortcutCounted_{};
   bool resetHeld_{};
   bool aiToggleHeld_{};
   bool aiEnabled_{};
@@ -79,7 +94,7 @@ class Game {
   int progressSample_{};
   bool trainingMode_{};
   bool trainingTerminal_{};
-  std::array<float, 171> policyWeights_{};
+  std::array<float, 232> policyWeights_{};
   sk_sp<SkImage> car_;
   sk_sp<SkImage> cone_;
 };

@@ -10,6 +10,7 @@ FIADA is currently a playable top-down 2D racing prototype with a long, flowing,
 - `S` / `Down`: brake and reverse
 - `A D` / arrow keys: steer
 - `Space`: hold to drift; release a charged drift for a mini-turbo
+- `Shift`: use the held Diamond, Feather, or Gold Key
 - `P`: toggle the trained reinforcement-learning driver
 - `R`: reset the car
 
@@ -17,7 +18,7 @@ Complete a clockwise lap. Leaving the asphalt applies heavy drag and caps the ca
 
 ## Checkpoints and AI
 
-Laps use twenty-nine ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 10-12-3 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. The native trainer is authoritative; `python scripts/train_policy.py` can generate a procedural 171-parameter warm start.
+Laps use twenty-nine ordered directional key checkpoints. Each gate must be crossed through the road-width span in the forward direction, preventing reverse-and-forward lap exploits. The bundled 14-12-4 MLP was trained locally with procedural warm-starting followed by episodic cross-entropy reinforcement learning. The native trainer is authoritative; `python scripts/train_policy.py` can generate a procedural 232-parameter warm start.
 
 
 
@@ -32,8 +33,11 @@ cmake --build build-native-trainer --target FIADA_train
 ./build-native-trainer/FIADA_train.exe --evaluate ./assets/policy/fiada_policy.bin
 ```
 
-The current policy observes drift charge and active boost and was retrained against the exact C++ physics. Native randomized reward improved from 1973.61 to 2339.49. The frozen holdout completed 24 of 33 laps with zero screen escapes, deliberately released 129 mini-turbos, spent 82.5 seconds drifting and 92.4 seconds boosted, and completed the canonical grid lap.
+The current policy observes inventory and matching-shortcut proximity and has a dedicated learned item-use output. On the 35-sector item track, native randomized reward improved from 1981.17 to 3041.18. The frozen holdout completed 26 of 33 laps with zero screen escapes, collected 50 items, used 24, entered 18 item-specific shortcuts, released 67 drift mini-turbos, and completed the canonical grid lap.
 
+## Deterministic items and shortcuts
+
+Item boxes contain no random-number calls. Their Diamond, Feather, or Gold Key result is a deterministic integer mix of box identity, lap, checkpoint, arrival tick bucket, approach speed, and lateral approach band. Repeating a box therefore requires reproducing the entire approach precisely, while identical simulation inputs remain reproducible. Diamond powers the crystal speed cut, Feather opens the narrow white terrain bypass, and Gold Key opens the gold technical lane. Using a mismatched item does not make another lane drivable.
 ## Physics
 
 FIADA uses a compact nonlinear bicycle model: longitudinal/lateral velocity, yaw rate, control lag, slip-angle tire saturation, weight transfer, and a friction circle. Drifting gently reduces rear grip and adds a mild yaw assist; a controlled slide quickly charges a release-triggered mini-turbo. This stays cheap for batched neural-network episodes while making braking, counter-steer, racing lines, and boost timing meaningful.

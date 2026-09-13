@@ -125,6 +125,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
       .reset = down('R'),
       .drift = down(VK_SPACE),
       .toggleAi = down('P'),
+      .useItem = down(VK_LSHIFT) || down(VK_RSHIFT),
     };
     while (accumulator >= fixedStep) {
       app.game.update(fixedStep, input);

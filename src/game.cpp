@@ -29,18 +29,30 @@ namespace fiada {
 namespace {
 constexpr float kPi = 3.14159265358979323846F;
 
-constexpr std::array<SkPoint, 29> kCourse{{
-    {-650, -350}, {-390, -390}, {-140, -320}, {80, -410},
-    {330, -330}, {610, -370}, {760, -250}, {725, -90},
-    {580, -25}, {340, -110}, {110, -35}, {-105, -125},
-    {-300, -45}, {-365, 90}, {-260, 185}, {-35, 125},
-    {185, 65}, {405, 145}, {590, 105}, {665, 225},
-    {560, 355}, {320, 415}, {70, 330}, {-180, 420},
-    {-455, 360}, {-690, 295}, {-785, 145}, {-745, -75},
-    {-705, -260},
+constexpr std::array<SkPoint, 35> kCourse{{
+    {-650,-350}, {-520,-430}, {-360,-330}, {-200,-430}, {-20,-300},
+    {150,-455}, {330,-330}, {520,-430}, {720,-330}, {780,-180},
+    {690,-70}, {520,-20}, {360,-140}, {180,-20}, {20,-150},
+    {-170,-60}, {-350,-150}, {-410,10}, {-310,170}, {-120,250},
+    {80,130}, {260,50}, {430,160}, {610,80}, {690,240},
+    {580,390}, {440,440}, {180,340}, {-50,460}, {-280,380},
+    {-520,450}, {-720,300}, {-810,100}, {-770,-100}, {-700,-280},
 }};
 constexpr int kSamplesPerSegment = 12;
 constexpr int kSampleCount = static_cast<int>(kCourse.size()) * kSamplesPerSegment;
+
+enum ItemType { kNoItem=0, kDiamond=1, kFeather=2, kGoldKey=3 };
+struct Shortcut { int item, start, end; SkPoint middle; };
+constexpr std::array<Shortcut,3> kShortcuts{{
+  {kDiamond,4,7,{260,-525}}, {kFeather,14,18,{-390,-255}}, {kGoldKey,25,29,{120,525}}
+}};
+constexpr std::array<int,7> kItemBoxSamples{{38,92,151,207,269,334,394}};
+
+float segmentDistance(float x,float y,SkPoint a,SkPoint b) {
+  const float abx=b.x()-a.x(), aby=b.y()-a.y(), apx=x-a.x(), apy=y-a.y();
+  const float u=std::clamp((apx*abx+apy*aby)/(abx*abx+aby*aby),0.0F,1.0F);
+  return std::hypot(x-(a.x()+u*abx),y-(a.y()+u*aby));
+}
 
 SkPoint coursePoint(int segment, float t) {
   const int n = static_cast<int>(kCourse.size());
@@ -113,6 +125,16 @@ float courseDistance(float x, float y) {
   return best;
 }
 
+float shortcutDistance(float x,float y,const Shortcut& shortcut) {
+  const SkPoint a=kCourse[shortcut.start], b=kCourse[shortcut.end];
+  return std::min(segmentDistance(x,y,a,shortcut.middle),segmentDistance(x,y,shortcut.middle,b));
+}
+
+std::uint32_t mixBits(std::uint32_t value) {
+  value ^= value >> 16; value *= 0x7feb352dU;
+  value ^= value >> 15; value *= 0x846ca68bU;
+  return value ^ (value >> 16);
+}
 sk_sp<SkImage> loadPng(const std::filesystem::path& path) {
   auto data = SkData::MakeFromFileName(path.string().c_str());
   if (!data) return nullptr;
@@ -158,7 +180,9 @@ void Game::reset() {
   angle_ = std::atan2(startAhead.y() - y_, startAhead.x() - x_);
   velocityX_ = velocityY_ = yawRate_ = 0.0F;
   throttle_ = brake_ = steer_ = driftCharge_ = turboTime_ = 0.0F; miniTurbos_ = 0;
-  wasDrifting_ = false;
+  wasDrifting_ = false; itemUseHeld_=shortcutCounted_=false;
+  heldItem_=shortcutItem_=kNoItem; lastItemBox_=-1; simulationTick_=0; itemEffectTime_=0.0F;
+  itemPickups_=itemUses_=shortcutsTaken_=0;
   cameraX_ = cameraY_ = 0.0F;
   previousX_ = x_;
   previousY_ = y_;
@@ -167,12 +191,47 @@ void Game::reset() {
 }
 
 bool Game::onRoad(float x, float y) const {
-  return courseDistance(x, y) < 68.0F;
+  if (courseDistance(x, y) < 78.0F) return true;
+  if (itemEffectTime_ <= 0.0F) return false;
+  for (const auto& shortcut : kShortcuts)
+    if (shortcut.item == shortcutItem_ && shortcutDistance(x,y,shortcut) < 42.0F) return true;
+  return false;
+}
+
+void Game::updateItems(const Input& control) {
+  ++simulationTick_;
+  itemEffectTime_=std::max(0.0F,itemEffectTime_-1.0F/120.0F);
+  if(itemEffectTime_<=0.0F){shortcutItem_=kNoItem;shortcutCounted_=false;}
+  if(control.useItem && !itemUseHeld_ && heldItem_!=kNoItem){
+    shortcutItem_=heldItem_; itemEffectTime_=heldItem_==kDiamond?3.4F:4.8F;
+    if(heldItem_==kDiamond) turboTime_=std::max(turboTime_,1.35F);
+    heldItem_=kNoItem; ++itemUses_; shortcutCounted_=false;
+  }
+  itemUseHeld_=control.useItem;
+  int touching=-1;
+  for(int i=0;i<static_cast<int>(kItemBoxSamples.size());++i){
+    const auto p=courseSample(kItemBoxSamples[i]);
+    if(std::hypot(x_-p.x(),y_-p.y())<30.0F){touching=i;break;}
+  }
+  if(touching<0) lastItemBox_=-1;
+  if(touching>=0 && touching!=lastItemBox_ && heldItem_==kNoItem){
+    const int lateralBand=static_cast<int>(std::floor((x_*0.73F+y_*1.19F)*0.25F));
+    const int speedBand=static_cast<int>(std::abs(velocityX_)*7.0F);
+    const std::uint32_t signature=static_cast<std::uint32_t>(touching*0x9e3779b9U)^static_cast<std::uint32_t>(laps_*977+checkpoint_*131+lateralBand*17+speedBand*29)^static_cast<std::uint32_t>(simulationTick_/9);
+    heldItem_=1+static_cast<int>(mixBits(signature)%3U); ++itemPickups_; lastItemBox_=touching;
+  }
+  for(const auto& shortcut:kShortcuts){
+    if(shortcut.item==shortcutItem_ && shortcutDistance(x_,y_,shortcut)<42.0F){
+      const int first=shortcut.start+1, after=(shortcut.end+1)%static_cast<int>(kCourse.size());
+      if(checkpoint_>=first && checkpoint_<=shortcut.end) checkpoint_=after;
+      if(!shortcutCounted_){++shortcutsTaken_;shortcutCounted_=true;if(trainingMode_)trainingReward_+=55.0F;}
+    }
+  }
 }
 
 
 
-std::array<float, 10> Game::observation() const {
+std::array<float, 14> Game::observation() const {
   const int nearest = nearestCourseSample(x_, y_);
   const int targetIndex = (nearest + 11) % kSampleCount;
   const auto currentRaw = courseSample(nearest);
@@ -189,9 +248,14 @@ std::array<float, 10> Game::observation() const {
   const float error=wrapAngle(desired-angle_);
   const float lateral=(x_-current.x())*-ty+(y_-current.y())*tx;
   const float curve=std::atan2(tx*fy-ty*fx,tx*fx+ty*fy);
+  float shortcutApproach=0.0F;
+  for(const auto& shortcut:kShortcuts) if(shortcut.item==heldItem_)
+    shortcutApproach=std::max(shortcutApproach,std::exp(-std::hypot(x_-kCourse[shortcut.start].x(),y_-kCourse[shortcut.start].y())/85.0F));
   return {std::sin(error),std::cos(error),std::clamp(lateral/76.0F,-2.0F,2.0F),
           velocityX_/45.0F,velocityY_/15.0F,yawRate_/2.0F,curve,
-          onRoad(x_,y_)?1.0F:0.0F, driftCharge_, std::clamp(turboTime_/1.5F,0.0F,1.0F)};
+          onRoad(x_,y_)?1.0F:0.0F, driftCharge_, std::clamp(turboTime_/1.5F,0.0F,1.0F),
+          heldItem_==kDiamond?1.0F:0.0F, heldItem_==kFeather?1.0F:0.0F,
+          heldItem_==kGoldKey?1.0F:0.0F, shortcutApproach};
 }
 
 void Game::beginTrainingEpisode(unsigned seed) {
@@ -226,6 +290,10 @@ Input Game::aiInput() const {
       output[o] += hidden[h] * policyWeights_[cursor++];
   for (float& value : output) value += policyWeights_[cursor++];
 
+  bool nearItemShortcut=false;
+  for(const auto& shortcut:kShortcuts)
+    if(shortcut.item==heldItem_ && std::hypot(x_-kCourse[shortcut.start].x(),y_-kCourse[shortcut.start].y())<115.0F)
+      nearItemShortcut=true;
   float longitudinal = std::tanh(output[0]);
   const float desiredSpeed = 7.0F + 43.0F * std::exp(-5.2F * std::abs(observation[6]))
                            - 5.0F * std::min(std::abs(observation[2]), 1.0F);
@@ -241,7 +309,8 @@ Input Game::aiInput() const {
                .reset = false,
                .drift = (sigmoid(output[2]) > 0.48F || (std::abs(observation[6]) > 0.13F && observation[3] > 0.30F)) &&
                         observation[9] < 0.05F && observation[8] < 0.36F,
-               .toggleAi = false};
+               .toggleAi = false,
+               .useItem = heldItem_ != kNoItem && (nearItemShortcut || sigmoid(output[3]) > 0.72F)};
 }
 
 void Game::update(float dt, const Input& input) {
@@ -252,6 +321,7 @@ void Game::update(float dt, const Input& input) {
   if (input.reset && !resetHeld_) reset();
   resetHeld_ = input.reset;
   const Input control = aiEnabled_ ? aiInput() : input;
+  updateItems(control);
 
   // Six-state nonlinear bicycle model: compact enough for batched training.
   constexpr float mass = 1180.0F, inertia = 1760.0F;
@@ -289,7 +359,8 @@ void Game::update(float dt, const Input& input) {
   turboTime_ = std::max(0.0F, turboTime_ - dt);
 
   const float turboForce = turboTime_ > 0.0F ? 5200.0F : 0.0F;
-  const float drive = throttle_ * 13800.0F / (1.0F + speedAbs / 48.0F) + turboForce;
+  const float itemBoost = shortcutItem_==kDiamond && itemEffectTime_>0.0F ? 2400.0F : 0.0F;
+  const float drive = throttle_ * 13800.0F / (1.0F + speedAbs / 48.0F) + turboForce + itemBoost;
   const float braking = brake_ * 10500.0F * (velocityX_ >= 0.0F ? 1.0F : -1.0F);
   const float requestedX = drive - braking;
   const float transfer = std::clamp(requestedX * 0.000045F, -0.22F, 0.22F);
@@ -399,7 +470,7 @@ void Game::update(float dt, const Input& input) {
   const float worldVy = std::sin(angle_) * velocityX_ + std::cos(angle_) * velocityY_;
   const bool movingForward = worldVx * tangentX + worldVy * tangentY > 1.0F;
   if (previousSide < 0.0F && currentSide >= 0.0F &&
-      acrossGate < 78.0F && movingForward) {
+      acrossGate < 88.0F && movingForward) {
     checkpoint_ = (checkpoint_ + 1) % static_cast<int>(kCourse.size());
     if (trainingMode_) trainingReward_ += 35.0F;
     if (checkpoint_ == 1) {
@@ -429,13 +500,13 @@ void Game::drawTrack(SkCanvas& canvas) const {
   stroke.setStrokeCap(SkPaint::kRound_Cap);
   stroke.setStrokeJoin(SkPaint::kRound_Join);
 
-  stroke.setStrokeWidth(168.0F);
+  stroke.setStrokeWidth(180.0F);
   stroke.setColor(SkColorSetRGB(116, 76, 10));
   canvas.drawPath(course, stroke);
-  stroke.setStrokeWidth(154.0F);
+  stroke.setStrokeWidth(166.0F);
   stroke.setColor(SkColorSetRGB(232, 174, 43));
   canvas.drawPath(course, stroke);
-  stroke.setStrokeWidth(136.0F);
+  stroke.setStrokeWidth(148.0F);
   stroke.setColor(SkColorSetRGB(39, 40, 43));
   canvas.drawPath(course, stroke);
 
@@ -445,6 +516,22 @@ void Game::drawTrack(SkCanvas& canvas) const {
   stroke.setPathEffect(SkDashPathEffect::Make(dashes.data(), static_cast<int>(dashes.size()), 0.0F));
   canvas.drawPath(course, stroke);
   stroke.setPathEffect(nullptr);
+
+  // Item-specific alternate lanes: crystal, feather-white, and keyed gold.
+  const std::array<SkColor,3> shortcutColors{SkColorSetRGB(70,220,255),SK_ColorWHITE,SkColorSetRGB(255,191,38)};
+  for(std::size_t i=0;i<kShortcuts.size();++i){
+    const auto& shortcut=kShortcuts[i]; SkPath lane; lane.moveTo(kCourse[shortcut.start]);
+    lane.lineTo(shortcut.middle); lane.lineTo(kCourse[shortcut.end]);
+    stroke.setStrokeWidth(92.0F); stroke.setColor(SkColorSetARGB(120,30,24,18)); canvas.drawPath(lane,stroke);
+    stroke.setStrokeWidth(70.0F); stroke.setColor(SkColorSetA(shortcutColors[i],175)); canvas.drawPath(lane,stroke);
+    stroke.setStrokeWidth(3.0F); stroke.setColor(shortcutColors[i]); canvas.drawPath(lane,stroke);
+  }
+  for(std::size_t i=0;i<kItemBoxSamples.size();++i){
+    const auto p=courseSample(kItemBoxSamples[i]);
+    paint.setColor(SkColorSetARGB(220,35,195,235));
+    SkPath box; box.moveTo(p.x(),p.y()-15);box.lineTo(p.x()+15,p.y());box.lineTo(p.x(),p.y()+15);box.lineTo(p.x()-15,p.y());box.close();
+    canvas.drawPath(box,paint); paint.setColor(SK_ColorWHITE); paint.setStyle(SkPaint::kStroke_Style);paint.setStrokeWidth(2);canvas.drawPath(box,paint);paint.setStyle(SkPaint::kFill_Style);
+  }
 
   // Start line, rotated to the local spline normal.
   canvas.save();
@@ -487,7 +574,7 @@ void Game::drawHud(SkCanvas& canvas) const {
   SkPaint panel;
   panel.setColor(SkColorSetARGB(210, 10, 14, 20));
   panel.setAntiAlias(true);
-  canvas.drawRoundRect(SkRect::MakeXYWH(22, 22, 300, 146), 16, 16, panel);
+  canvas.drawRoundRect(SkRect::MakeXYWH(22, 22, 340, 174), 16, 16, panel);
   text(canvas, aiEnabled_ ? "FIADA  [AI]" : "FIADA  [HUMAN]", 42, 56, 26, SkColorSetRGB(255, 202, 58));
   text(canvas, std::format("SPEED  {:03.0f} km/h", std::abs(velocityX_) * 3.6F), 42, 86, 18, SK_ColorWHITE);
   text(canvas, std::format("LAP    {}   {:05.2f}s", laps_ + 1, lapTime_), 42, 112, 18, SK_ColorWHITE);
@@ -496,7 +583,9 @@ void Game::drawHud(SkCanvas& canvas) const {
   const auto turbo = std::format("DRIFT  {:03.0f}%{}", driftCharge_ * 100.0F, turboTime_ > 0.0F ? "  TURBO!" : "");
   text(canvas, std::format("CHECKPOINT  {:02}/{}", checkpoint_, kCourse.size()), 174, 136, 14, SkColorSetRGB(166, 184, 205));
   text(canvas, turbo, 42, 160, 16, turboTime_ > 0.0F ? SkColorSetRGB(64, 224, 255) : SkColorSetRGB(255, 174, 62));
-  text(canvas, "WASD / ARROWS DRIVE   HOLD SPACE TO DRIFT   P TOGGLE AI   R RESET", 24, height_ - 24.0F, 15,
+  const char* itemName=heldItem_==kDiamond?"DIAMOND":heldItem_==kFeather?"FEATHER":heldItem_==kGoldKey?"GOLD KEY":"EMPTY";
+  text(canvas,std::format("ITEM   {}   USES {}   CUTS {}",itemName,itemUses_,shortcutsTaken_),42,184,15,SkColorSetRGB(105,224,255));
+  text(canvas, "WASD / ARROWS DRIVE   HOLD SPACE DRIFT   SHIFT USE ITEM   P AI   R RESET", 24, height_ - 24.0F, 15,
        SkColorSetARGB(220, 255, 255, 255));
 }
 

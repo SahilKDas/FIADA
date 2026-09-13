@@ -33,7 +33,8 @@ fiada::Input act(const std::array<float,fiada::policy::kObservations>& obs, cons
             std::clamp(1.8F*obs[0]-1.25F*obs[2]+1.4F*obs[6]-0.3F*obs[5],-1.0F,1.0F),
             std::clamp(.18F+.38F*std::max(std::abs(obs[0]),std::abs(obs[2])),.18F,.72F)),-1.0F,1.0F),
           .reset=false,
-          .drift=(sigmoid(o[2])>.48F || (std::abs(obs[6])>.13F && obs[3]>.30F)) && obs[9]<.05F && obs[8]<.36F,.toggleAi=false};
+          .drift=(sigmoid(o[2])>.48F || (std::abs(obs[6])>.13F && obs[3]>.30F)) && obs[9]<.05F && obs[8]<.36F,.toggleAi=false,
+          .useItem=(obs[10]+obs[11]+obs[12])>.5F && (obs[13]>.28F || sigmoid(o[3])>.72F)};
 }
 float evaluate(const std::array<float,P>& weights, std::uint32_t baseSeed, bool randomized=true) {
   float total=0; const std::uint32_t episodes=randomized?3:1;
@@ -54,15 +55,15 @@ int main(int argc,char** argv){
     std::ifstream input(argv[2], std::ios::binary);
     input.read(reinterpret_cast<char*>(weights.data()), sizeof(weights));
     if (!input) return 2;
-    int completed=0, terminals=0, totalMiniTurbos=0; long long driftSteps=0, turboSteps=0;
+    int completed=0, terminals=0, totalMiniTurbos=0, pickups=0, uses=0, cuts=0; long long driftSteps=0, turboSteps=0;
     for (std::uint32_t episode=0; episode<33; ++episode) {
       fiada::Game game(false); game.beginTrainingEpisode(episode==0?0:900000+episode*7919);
       for(int step=0;step<120*90 && !game.trainingTerminal() && game.laps()==0;++step)
         { const auto command=act(game.observation(),weights); driftSteps += command.drift; game.update(1.0F/120.0F,command); turboSteps += game.turboTime()>0.0F; }
-      completed += game.laps()>0; terminals += game.trainingTerminal(); totalMiniTurbos += game.miniTurbos();
+      completed += game.laps()>0; terminals += game.trainingTerminal(); totalMiniTurbos += game.miniTurbos(); pickups+=game.itemPickups(); uses+=game.itemUses(); cuts+=game.shortcutsTaken();
       if(episode==0) std::cout<<"canonical_lap="<<(game.laps()>0)<<" checkpoint="<<game.checkpoint()<<"\n";
     }
-    std::cout<<"holdout_laps="<<completed<<"/33 terminal_escapes="<<terminals<<"/33 mini_turbos="<<totalMiniTurbos<<" drift_seconds="<<driftSteps/120.0<<" turbo_seconds="<<turboSteps/120.0<<"\n";
+    std::cout<<"holdout_laps="<<completed<<"/33 terminal_escapes="<<terminals<<"/33 mini_turbos="<<totalMiniTurbos<<" drift_seconds="<<driftSteps/120.0<<" turbo_seconds="<<turboSteps/120.0<<" item_pickups="<<pickups<<" item_uses="<<uses<<" shortcuts="<<cuts<<"\n";
     return completed>0 ? 0 : 3;
   }
   std::filesystem::path output=argc>1?argv[1]:"assets/policy/fiada_policy.bin";
