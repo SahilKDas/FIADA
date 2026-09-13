@@ -48,3 +48,12 @@ powershell -ExecutionPolicy Bypass -File scripts/build-windows-exoskeleton.ps1
 The one-executable exoskeleton keeps DLLs, PNGs, the model, licenses, hashes, and provenance external. Packaging fails if persistent AI data exceeds 100 MB.
 
 Original SVG art is in `assets/svg`; Skia-ready PNGs are in `assets/png`.
+## Grand Prix expansion
+
+FIADA now stages eight-driver races: one player and seven deterministic rivals. The five profile slots emphasize aggression, defense, shortcuts, drift, and recovery. Drafting, contact impulses, live placement, a three-second grid countdown, deterministic rival items, and forward-camera racing run inside the same 120 Hz simulation.
+
+Five championship geometries are available with `[` and `]`: Gold Circuit, Alpine Switchbacks, Volcanic Foundry, Coastal Causeway, and Neon City. Press `C` for the championship presentation layer and `L` for the in-game AI Lab telemetry overlay. The Lab exposes policy inputs/outputs, a recurrent hidden-state summary, and the live rival tournament order without changing simulation state.
+
+Xbox-compatible XInput controllers use the left stick to steer, triggers to accelerate/brake, `A` to drift, `X` to use an item, shoulder buttons to change circuit, Back for the Lab, and Start for championship mode. Keyboard control remains available. A redistributable CC0 engine loop and its provenance manifest live under `assets/audio`.
+
+Run `FIADA.exe --grand-prix-smoke` to replay five paired seeded simulations and verify deterministic hashes and valid eight-driver placement.

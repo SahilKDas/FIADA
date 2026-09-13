@@ -48,6 +48,7 @@ $assetRoot = Join-Path $packageRoot 'assets'
 New-Item -ItemType Directory -Force $assetRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\png') -Destination $assetRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\policy') -Destination $assetRoot -Recurse
+Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\audio') -Destination $assetRoot -Recurse
 $aiBytes = (Get-ChildItem -LiteralPath (Join-Path $assetRoot 'policy') -Recurse -File | Measure-Object Length -Sum).Sum
 if ($aiBytes -gt 100MB) { throw "Persistent AI data exceeds 100 MB: $aiBytes bytes" }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging\WINDOWS-X64-EXOSKELETON.md') -Destination (Join-Path $packageRoot 'README.md')

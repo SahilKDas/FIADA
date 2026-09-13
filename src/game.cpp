@@ -22,6 +22,7 @@
 #include <format>
 #include <fstream>
 #include <random>
+#include <numeric>
 
 #include <windows.h>
 
@@ -40,6 +41,18 @@ constexpr std::array<SkPoint, 35> kCourse{{
 }};
 constexpr int kSamplesPerSegment = 12;
 constexpr int kSampleCount = static_cast<int>(kCourse.size()) * kSamplesPerSegment;
+int gTrackIndex = 0;
+SkPoint trackControl(int index) {
+  const int n=static_cast<int>(kCourse.size()); auto p=kCourse[(index%n+n)%n];
+  const float x=p.x(),y=p.y();
+  switch(gTrackIndex){
+    case 1: return {x*.88F+std::sin(y*.012F)*105.0F,y*1.18F}; // Alpine switchbacks
+    case 2: return {x*1.08F,y*.86F+std::sin(x*.015F)*135.0F}; // Volcanic foundry
+    case 3: return {x*1.28F+std::sin(y*.009F)*70.0F,y*.78F};  // Coastal causeway
+    case 4: return {x*.95F+std::sin(y*.021F)*55.0F,y*.95F+std::sin(x*.019F)*55.0F}; // Neon city
+    default:return p;
+  }
+}
 
 enum ItemType { kNoItem=0, kDiamond=1, kFeather=2, kGoldKey=3 };
 struct Shortcut { int item, start, end; SkPoint middle; };
@@ -56,10 +69,10 @@ float segmentDistance(float x,float y,SkPoint a,SkPoint b) {
 
 SkPoint coursePoint(int segment, float t) {
   const int n = static_cast<int>(kCourse.size());
-  const SkPoint& p0 = kCourse[(segment - 1 + n) % n];
-  const SkPoint& p1 = kCourse[segment % n];
-  const SkPoint& p2 = kCourse[(segment + 1) % n];
-  const SkPoint& p3 = kCourse[(segment + 2) % n];
+  const SkPoint& p0 = trackControl((segment - 1 + n) % n);
+  const SkPoint& p1 = trackControl(segment % n);
+  const SkPoint& p2 = trackControl((segment + 1) % n);
+  const SkPoint& p3 = trackControl((segment + 2) % n);
   const float t2 = t * t, t3 = t2 * t;
   return {
       0.5F * ((2 * p1.x()) + (-p0.x() + p2.x()) * t +
@@ -98,7 +111,7 @@ float sigmoid(float value) { return 1.0F / (1.0F + std::exp(-value)); }
 
 SkPath coursePath() {
   SkPath path;
-  path.moveTo(kCourse[0]);
+  path.moveTo(trackControl(0));
   for (int segment = 0; segment < static_cast<int>(kCourse.size()); ++segment)
     for (int step = 1; step <= 12; ++step)
       path.lineTo(coursePoint(segment, step / 12.0F));
@@ -126,7 +139,7 @@ float courseDistance(float x, float y) {
 }
 
 float shortcutDistance(float x,float y,const Shortcut& shortcut) {
-  const SkPoint a=kCourse[shortcut.start], b=kCourse[shortcut.end];
+  const SkPoint a=trackControl(shortcut.start), b=trackControl(shortcut.end);
   return std::min(segmentDistance(x,y,a,shortcut.middle),segmentDistance(x,y,shortcut.middle,b));
 }
 
@@ -172,8 +185,9 @@ void Game::loadAssets() {
 }
 
 void Game::reset() {
-  x_ = kCourse[0].x();
-  y_ = kCourse[0].y();
+  gTrackIndex = trackIndex_;
+  x_ = trackControl(0).x();
+  y_ = trackControl(0).y();
   const auto startAhead = coursePoint(0, 0.05F);
   angle_ = std::atan2(startAhead.y() - y_, startAhead.x() - x_);
   velocityX_ = velocityY_ = yawRate_ = 0.0F;
@@ -184,6 +198,8 @@ void Game::reset() {
   itemPickupsByType_={};shortcutsByType_={};offroadTime_=0.0F;policyTick_=0;cachedPolicyOutput_={};
   policyState_ = {};
   cameraX_ = cameraY_ = 0.0F;
+  countdownTicks_ = trainingMode_ ? 0 : 360; placement_ = 1; raceAwarded_=false;
+  for (int i=0;i<7;++i) { auto p=courseSample(kSampleCount-i*3-5); auto q=courseSample(kSampleCount-i*3-4); rivals_[i]={p.x(),p.y(),std::atan2(q.y()-p.y(),q.x()-p.x()),18.0F,static_cast<float>(kSampleCount-i*3-5),0.0F,0, i+2, 0, i%5, false}; }
   previousX_ = x_;
   previousY_ = y_;
   lapTime_ = 0.0F;
@@ -250,7 +266,7 @@ policy::Observation Game::observation() const {
   float shortcutApproach=0.0F;
   const int relevantShortcutItem=heldItem_!=kNoItem?heldItem_:shortcutItem_;
   for(const auto& shortcut:kShortcuts)if(shortcut.item==relevantShortcutItem)
-    shortcutApproach=std::max(shortcutApproach,std::exp(-std::hypot(x_-kCourse[shortcut.start].x(),y_-kCourse[shortcut.start].y())/85.0F));
+    shortcutApproach=std::max(shortcutApproach,std::exp(-std::hypot(x_-trackControl(shortcut.start).x(),y_-trackControl(shortcut.start).y())/85.0F));
   obs[0]=std::sin(error);obs[1]=std::cos(error);obs[2]=std::clamp(lateral/82.0F,-2.0F,2.0F);
   obs[3]=velocityX_/45.0F;obs[4]=velocityY_/15.0F;obs[5]=yawRate_/2.0F;obs[6]=curve;
   obs[7]=onRoad(x_,y_)?1.0F:0.0F;obs[8]=driftCharge_;obs[9]=std::clamp(turboTime_/1.5F,0.0F,1.0F);
@@ -269,7 +285,7 @@ policy::Observation Game::observation() const {
   const float phase=2.0F*kPi*nearest/static_cast<float>(kSampleCount);
   obs[30]=std::sin(phase);obs[31]=std::cos(phase);
   for(const auto& shortcut:kShortcuts)if(shortcut.item==relevantShortcutItem){
-    const SkPoint entry=kCourse[shortcut.start],exit=kCourse[shortcut.end];
+    const SkPoint entry=trackControl(shortcut.start),exit=trackControl(shortcut.end);
     const float entryDistance=std::hypot(x_-entry.x(),y_-entry.y());
     const float middleDistance=std::hypot(x_-shortcut.middle.x(),y_-shortcut.middle.y());
     const SkPoint waypoint=entryDistance>44.0F?entry:(middleDistance>54.0F?shortcut.middle:exit);
@@ -298,7 +314,7 @@ void Game::beginTrainingEpisode(unsigned seed) {
 void Game::beginItemTrainingEpisode(int itemType,unsigned seed){
   beginTrainingEpisode(seed);
   const auto& shortcut=kShortcuts[std::clamp(itemType,1,3)-1];
-  const auto start=kCourse[shortcut.start],before=courseSample(shortcut.start*kSamplesPerSegment-1);
+  const auto start=trackControl(shortcut.start),before=courseSample(shortcut.start*kSamplesPerSegment-1);
   x_=before.x();y_=before.y();angle_=std::atan2(start.y()-y_,start.x()-x_);velocityX_=20.0F;
   heldItem_=shortcut.item;checkpoint_=shortcut.start+1;progressSample_=shortcut.start*kSamplesPerSegment-1;
   previousX_=x_;previousY_=y_;cameraX_=x_;cameraY_=y_;policyState_={};
@@ -323,9 +339,17 @@ void Game::update(float dt, const Input& input) {
   trainingReward_ = 0.0F;
   if (input.toggleAi && !aiToggleHeld_) aiEnabled_ = !aiEnabled_;
   aiToggleHeld_ = input.toggleAi;
+  if (input.labOverlay && !overlayHeld_) labMode_ = !labMode_;
+  overlayHeld_ = input.labOverlay;
+  if (input.menu && !menuHeld_) championshipMode_ = !championshipMode_;
+  menuHeld_ = input.menu;
+  if (!navHeld_ && input.next) { trackIndex_=(trackIndex_+1)%5; reset(); }
+  if (!navHeld_ && input.previous) { trackIndex_=(trackIndex_+4)%5; reset(); }
+  navHeld_=input.next||input.previous;
   if (input.reset && !resetHeld_) reset();
   resetHeld_ = input.reset;
-  const Input control = aiEnabled_ ? aiInput() : input;
+  Input control = aiEnabled_ ? aiInput() : input;
+  if (!trainingMode_ && countdownTicks_>0) { control.throttle=control.brake=control.steer=0.0F; control.drift=control.useItem=false; }
   updateItems(control);
 
   // Six-state nonlinear bicycle model: compact enough for batched training.
@@ -455,6 +479,7 @@ void Game::update(float dt, const Input& input) {
   progressSample_ = newProgress;
   trainingReward_ = progressDelta * 4.0F + std::max(velocityX_, 0.0F) * 0.006F -
                     (road ? 0.0F : 1.25F) + (turboTime_ > 0.0F ? 0.055F : 0.0F);
+  if (!trainingMode_) resolveRivalCollisions();
   if (escaped) {
     if (trainingMode_) { trainingReward_ -= 90.0F; trainingTerminal_ = true; }
     else reset();
@@ -463,7 +488,7 @@ void Game::update(float dt, const Input& input) {
 
   // Mario Kart-style ordered key checkpoints. A gate counts only when its
   // plane is crossed forward and within the road-width span.
-  const SkPoint gate = kCourse[checkpoint_];
+  const SkPoint gate = trackControl(checkpoint_);
   const SkPoint before = coursePoint(checkpoint_, 0.0F);
   const SkPoint after = coursePoint(checkpoint_, 0.04F);
   float tangentX = after.x() - before.x(), tangentY = after.y() - before.y();
@@ -487,6 +512,22 @@ void Game::update(float dt, const Input& input) {
       if (bestLap_ == 0.0F || lapTime_ < bestLap_) bestLap_ = lapTime_;
       lapTime_ = 0.0F;
       if (trainingMode_) trainingReward_ += 500.0F;
+    }
+  }
+  if (!trainingMode_ && laps_ >= 3 && !raceAwarded_) {
+    raceAwarded_ = true;
+    constexpr std::array<int,8> points{15,12,10,8,6,4,2,1};
+    championshipPoints_[0] += points[std::clamp(placement_-1,0,7)];
+    for (int i=0;i<7;++i) championshipPoints_[i+1] += points[std::clamp(rivals_[i].place-1,0,7)];
+    drivingProfile_[0]=std::lerp(drivingProfile_[0],std::clamp(offroadTime_/std::max(bestLap_*3.0F,1.0F),0.0F,1.0F),.25F);
+    drivingProfile_[1]=std::lerp(drivingProfile_[1],std::clamp(miniTurbos_/20.0F,0.0F,1.0F),.25F);
+    drivingProfile_[2]=std::lerp(drivingProfile_[2],std::clamp(itemUses_/12.0F,0.0F,1.0F),.25F);
+    rivals_[6].personality=drivingProfile_[1]>.45F?0:(drivingProfile_[0]>.25F?4:1);
+    if (const char* local=std::getenv("LOCALAPPDATA")) {
+      std::filesystem::path dir=std::filesystem::path(local)/"FIADA"; std::error_code ec; std::filesystem::create_directories(dir,ec);
+      std::ofstream out(dir/"championship-v1.dat",std::ios::binary);
+      out.write(reinterpret_cast<const char*>(championshipPoints_.data()),sizeof(championshipPoints_));
+      out.write(reinterpret_cast<const char*>(drivingProfile_.data()),sizeof(drivingProfile_));
     }
   }
 }
@@ -529,8 +570,8 @@ void Game::drawTrack(SkCanvas& canvas) const {
   // Item-specific alternate lanes: crystal, feather-white, and keyed gold.
   const std::array<SkColor,3> shortcutColors{SkColorSetRGB(70,220,255),SK_ColorWHITE,SkColorSetRGB(255,191,38)};
   for(std::size_t i=0;i<kShortcuts.size();++i){
-    const auto& shortcut=kShortcuts[i]; SkPath lane; lane.moveTo(kCourse[shortcut.start]);
-    lane.lineTo(shortcut.middle); lane.lineTo(kCourse[shortcut.end]);
+    const auto& shortcut=kShortcuts[i]; SkPath lane; lane.moveTo(trackControl(shortcut.start));
+    lane.lineTo(shortcut.middle); lane.lineTo(trackControl(shortcut.end));
     stroke.setStrokeWidth(shortcut.item==kGoldKey?92.0F:126.0F); stroke.setColor(SkColorSetARGB(120,30,24,18)); canvas.drawPath(lane,stroke);
     stroke.setStrokeWidth(shortcut.item==kGoldKey?70.0F:108.0F); stroke.setColor(SkColorSetA(shortcutColors[i],175)); canvas.drawPath(lane,stroke);
     stroke.setStrokeWidth(3.0F); stroke.setColor(shortcutColors[i]); canvas.drawPath(lane,stroke);
@@ -544,9 +585,9 @@ void Game::drawTrack(SkCanvas& canvas) const {
 
   // Start line, rotated to the local spline normal.
   canvas.save();
-  canvas.translate(kCourse[0].x(), kCourse[0].y());
+  canvas.translate(trackControl(0).x(), trackControl(0).y());
   const auto startDirection = coursePoint(0, 0.05F);
-  canvas.rotate(std::atan2(startDirection.y()-kCourse[0].y(), startDirection.x()-kCourse[0].x()) * 180.0F / kPi);
+  canvas.rotate(std::atan2(startDirection.y()-trackControl(0).y(), startDirection.x()-trackControl(0).x()) * 180.0F / kPi);
   constexpr float tile = 10.0F;
   for (int row = 0; row < 15; ++row)
     for (int col = 0; col < 3; ++col) {
@@ -557,7 +598,7 @@ void Game::drawTrack(SkCanvas& canvas) const {
 
   if (cone_) {
     for (int i = 2; i < static_cast<int>(kCourse.size()); i += 2) {
-      const SkPoint c = kCourse[i];
+      const SkPoint c = trackControl(i);
       canvas.drawImageRect(cone_, SkRect::MakeXYWH(c.x() - 12, c.y() - 16, 24, 32),
                            SkSamplingOptions(SkFilterMode::kLinear), nullptr);
     }
@@ -609,6 +650,61 @@ void Game::render(SkCanvas& canvas) {
   drawCar(canvas);
   canvas.restore();
   drawHud(canvas);
+}
+
+void Game::updateRivals(float dt) {
+  const float playerProgress = static_cast<float>(laps_ * kSampleCount + nearestCourseSample(x_, y_));
+  for (int i=0;i<7;++i) {
+    auto& r=rivals_[i];
+    const int nearest=nearestCourseSample(r.x,r.y);
+    const int look=10+(i%5==3?4:0);
+    const auto target=courseSample(nearest+look);
+    const float desired=std::atan2(target.y()-r.y,target.x()-r.x);
+    r.angle+=std::clamp(wrapAngle(desired-r.angle),-1.8F*dt,1.8F*dt);
+    float curve=std::abs(wrapAngle(std::atan2(courseSample(nearest+22).y()-r.y,courseSample(nearest+22).x()-r.x)-r.angle));
+    const float personalitySpeed[5]={46,43,48,50,42};
+    float wanted=personalitySpeed[i%5]-curve*13.0F;
+    // Deterministic drafting and rubber-free difficulty tuning.
+    float draft=0.0F;
+    for(int j=0;j<7;++j) if(i!=j) {
+      const float dx=rivals_[j].x-r.x,dy=rivals_[j].y-r.y,d=std::hypot(dx,dy);
+      if(d<145&&d>25&&std::cos(r.angle)*dx+std::sin(r.angle)*dy>0) draft=std::max(draft,(145-d)/145.0F);
+    }
+    wanted+=draft*5.0F+0.0F;
+    r.speed+=std::clamp(wanted-r.speed,-18.0F*dt,12.0F*dt);
+    r.x+=std::cos(r.angle)*r.speed*dt*14.0F;r.y+=std::sin(r.angle)*r.speed*dt*14.0F;
+    int now=nearestCourseSample(r.x,r.y); if(nearest>kSampleCount-20&&now<20)++r.lap;
+    r.progress=static_cast<float>(r.lap*kSampleCount+now);
+    if((simulationTick_+i*97)%1700==0)r.item=1+static_cast<int>(mixBits(static_cast<std::uint32_t>(simulationTick_+i*313))%3);
+    if(r.item&&((simulationTick_+i*31)%420==0)){r.turbo=r.item==1?1.2F:.35F;r.item=0;}
+    r.turbo=std::max(0.0F,r.turbo-dt);
+  }
+  placement_=1;for(const auto&r:rivals_)if(r.progress>playerProgress)++placement_;
+  for(int i=0;i<7;++i){int p=1;for(int j=0;j<7;++j)if(rivals_[j].progress>rivals_[i].progress)++p;if(playerProgress>rivals_[i].progress)++p;rivals_[i].place=p;}
+}
+
+void Game::resolveRivalCollisions() {
+  for(auto&r:rivals_){const float dx=x_-r.x,dy=y_-r.y,d=std::hypot(dx,dy);if(d<45.0F&&d>.01F&&r.turbo<=0.0F&&itemEffectTime_<=0.0F){const float nx=dx/d,ny=dy/d,push=(45-d)*.18F;x_+=nx*push;y_+=ny*push;r.x-=nx*push;r.y-=ny*push;velocityY_+=std::clamp((-std::sin(angle_)*nx+std::cos(angle_)*ny)*4.0F,-5.0F,5.0F);r.speed*=.96F;}}
+}
+
+void Game::drawRivals(SkCanvas& canvas) const {
+  constexpr std::array<SkColor,7> colors{SK_ColorCYAN,SK_ColorGREEN,SK_ColorMAGENTA,SK_ColorYELLOW,SkColorSetRGB(255,120,40),SkColorSetRGB(120,140,255),SkColorSetRGB(245,245,245)};
+  SkPaint p;p.setAntiAlias(true);
+  for(int i=0;i<7;++i){const auto&r=rivals_[i];canvas.save();canvas.translate(r.x,r.y);canvas.rotate(r.angle*180.0F/kPi);p.setColor(colors[i]);canvas.drawRoundRect(SkRect::MakeXYWH(-30,-15,60,30),8,8,p);p.setColor(SK_ColorBLACK);canvas.drawRect(SkRect::MakeXYWH(3,-11,14,22),p);if(r.turbo>0){p.setColor(SkColorSetARGB(180,60,220,255));canvas.drawCircle(-37,0,9,p);}canvas.restore();}
+}
+
+void Game::drawGrandPrixHud(SkCanvas& canvas) const {
+  text(canvas,std::format("PLACE {}/8  TRACK {}/5  PTS {}",placement_,trackIndex_+1,championshipPoints_[0]),width_-190.0F,58,28,SkColorSetRGB(255,205,55));
+  if(countdownTicks_>0){const int n=(countdownTicks_+119)/120;text(canvas,n>0?std::format("{}",n):"GO!",width_*.48F,height_*.35F,72,SK_ColorWHITE);}
+  if(labMode_){SkPaint p;p.setColor(SkColorSetARGB(220,5,10,18));canvas.drawRoundRect(SkRect::MakeXYWH(width_-370.0F,82,345,245),14,14,p);text(canvas,"AI LAB — LIVE TELEMETRY",width_-350.0F,112,18,SkColorSetRGB(80,220,255));text(canvas,std::format("OBS heading {:.2f} lateral {:.2f}",observation()[0],observation()[2]),width_-350.0F,142,14,SK_ColorWHITE);text(canvas,std::format("OUT throttle {:.2f} steer {:.2f}",cachedPolicyOutput_[0],cachedPolicyOutput_[2]),width_-350.0F,166,14,SK_ColorWHITE);text(canvas,std::format("HIDDEN mean {:.3f}",std::accumulate(policyState_.recurrent.begin(),policyState_.recurrent.end(),0.0F)/policyState_.recurrent.size()),width_-350.0F,190,14,SK_ColorWHITE);for(int i=0;i<7;++i)text(canvas,std::format("R{}  P{}  profile {}",i+1,rivals_[i].place,rivals_[i].personality),width_-350.0F,216+i*15,12,SkColorSetRGB(190,200,215));}
+}
+std::uint64_t Game::deterministicHash() const {
+  std::uint64_t h=1469598103934665603ULL;
+  auto add=[&](std::uint64_t v){h^=v;h*=1099511628211ULL;};
+  add(simulationTick_);add(static_cast<std::uint64_t>(trackIndex_));add(static_cast<std::uint64_t>(placement_));
+  add(static_cast<std::uint64_t>(std::lround(x_*16)));add(static_cast<std::uint64_t>(std::lround(y_*16)));
+  for(const auto&r:rivals_){add(static_cast<std::uint64_t>(std::lround(r.x*16)));add(static_cast<std::uint64_t>(std::lround(r.y*16)));add(r.place);}
+  return h;
 }
 
 }  // namespace fiada

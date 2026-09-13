@@ -41,7 +41,7 @@ target_link_libraries(FIADA PRIVATE
   "${FIADA_STATIC_ROOT}/lib/libwebp.a"
   "${FIADA_STATIC_ROOT}/lib/libsharpyuv.a"
   "${FIADA_STATIC_ROOT}/lib/libzs.a"
-  gdi32 user32 comdlg32 shell32 ole32 oleaut32 uuid usp10 opengl32 bcrypt)
+  gdi32 user32 xinput9_1_0 winmm comdlg32 shell32 ole32 oleaut32 uuid usp10 opengl32 bcrypt)
 
 add_executable(FIADA_train src/training_main.cpp src/game.cpp src/game.hpp src/neural_policy.cpp src/neural_policy.hpp)
 target_include_directories(FIADA_train PRIVATE "${SKIA_ROOT}/include/skia")
@@ -53,7 +53,7 @@ target_link_libraries(FIADA_train PRIVATE
   "${FIADA_STATIC_ROOT}/lib/libwebpdemux.a" "${FIADA_STATIC_ROOT}/lib/libwebpmux.a"
   "${FIADA_STATIC_ROOT}/lib/libwebp.a" "${FIADA_STATIC_ROOT}/lib/libsharpyuv.a"
   "${FIADA_STATIC_ROOT}/lib/libzs.a"
-  gdi32 user32 comdlg32 shell32 ole32 oleaut32 uuid usp10 opengl32 bcrypt)
+  gdi32 user32 xinput9_1_0 winmm comdlg32 shell32 ole32 oleaut32 uuid usp10 opengl32 bcrypt)
 
 add_custom_command(TARGET FIADA POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -61,4 +61,7 @@ add_custom_command(TARGET FIADA POST_BUILD
           "$<TARGET_FILE_DIR:FIADA>/assets/png"
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           "${CMAKE_SOURCE_DIR}/assets/policy"
-          "$<TARGET_FILE_DIR:FIADA>/assets/policy")
+          "$<TARGET_FILE_DIR:FIADA>/assets/policy"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          "${CMAKE_SOURCE_DIR}/assets/audio"
+          "$<TARGET_FILE_DIR:FIADA>/assets/audio")

@@ -22,6 +22,11 @@ struct Input {
   bool drift{};
   bool toggleAi{};
   bool useItem{};
+  bool menu{};
+  bool confirm{};
+  bool next{};
+  bool previous{};
+  bool labOverlay{};
 };
 
 class Game {
@@ -34,6 +39,8 @@ class Game {
   [[nodiscard]] bool aiEnabled() const { return aiEnabled_; }
   [[nodiscard]] int laps() const { return laps_; }
   [[nodiscard]] int checkpoint() const { return checkpoint_; }
+  [[nodiscard]] int placement() const { return placement_; }
+  [[nodiscard]] bool spectatorFastForwardAllowed() const { return aiEnabled_ || labMode_; }
   void beginTrainingEpisode(unsigned seed);
   void beginItemTrainingEpisode(int itemType, unsigned seed);
   [[nodiscard]] policy::Observation observation() const;
@@ -50,6 +57,7 @@ class Game {
   [[nodiscard]] int shortcutsTaken(int type) const { return type >= 1 && type <= 3 ? shortcutsByType_[type-1] : 0; }
   [[nodiscard]] float trainingReward() const { return trainingReward_; }
   [[nodiscard]] bool trainingTerminal() const { return trainingTerminal_; }
+  [[nodiscard]] std::uint64_t deterministicHash() const;
 
  private:
   void reset();
@@ -59,6 +67,10 @@ class Game {
   void drawTrack(SkCanvas& canvas) const;
   void drawHud(SkCanvas& canvas) const;
   void drawCar(SkCanvas& canvas) const;
+  void updateRivals(float dt);
+  void resolveRivalCollisions();
+  void drawRivals(SkCanvas& canvas) const;
+  void drawGrandPrixHud(SkCanvas& canvas) const;
   Input aiInput();
 
   int width_{1280};
@@ -110,6 +122,21 @@ class Game {
   policy::State policyState_{};
   policy::Output cachedPolicyOutput_{};
   int policyTick_{};
+  struct Rival { float x{},y{},angle{},speed{},progress{},turbo{}; int lap{},place{},item{},personality{}; bool finished{}; };
+  std::array<Rival,7> rivals_{};
+  std::array<int,8> championshipPoints_{};
+  std::array<float,8> drivingProfile_{};
+  int placement_{1};
+  int countdownTicks_{360};
+  int championshipRound_{};
+  int trackIndex_{};
+  bool labMode_{};
+  bool championshipMode_{};
+  bool overlayHeld_{};
+  bool navHeld_{};
+  bool raceAwarded_{};
+  bool menuHeld_{};
+  unsigned raceSeed_{0xF1ADAU};
   sk_sp<SkImage> car_;
   sk_sp<SkImage> cone_;
 };

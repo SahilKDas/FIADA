@@ -5,10 +5,13 @@
 #include "include/core/SkSurface.h"
 
 #include <windows.h>
+#include <xinput.h>
+#include <mmsystem.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -73,6 +76,15 @@ bool down(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
 }  // namespace
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCommand) {
+  if (std::string_view(commandLine).find("--grand-prix-smoke") != std::string_view::npos) {
+    fiada::Game a(false), b(false); a.enableAi(); b.enableAi();
+    for(int track=0;track<5;++track){
+      if(track){fiada::Input next{};next.next=true;a.update(1.0F/120.0F,next);b.update(1.0F/120.0F,next);}
+      for(int step=0;step<1800;++step){a.update(1.0F/120.0F,{});b.update(1.0F/120.0F,{});}
+      if(a.deterministicHash()!=b.deterministicHash()||a.placement()<1||a.placement()>8)return 8;
+    }
+    return 0;
+  }
   if (std::string_view(commandLine).find("--ai-smoke") != std::string_view::npos) {
     fiada::Game simulation;
     simulation.resize(1280, 720);
@@ -82,6 +94,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
     return simulation.laps() > 0 ? 0 : 3;
   }
   SetProcessDPIAware();
+  std::array<wchar_t,32768> modulePath{};
+  GetModuleFileNameW(nullptr,modulePath.data(),static_cast<DWORD>(modulePath.size()));
+  const auto engineSound=(std::filesystem::path(modulePath.data()).parent_path()/L"assets/audio/engine_loop.wav").wstring();
+  PlaySoundW(engineSound.c_str(),nullptr,SND_FILENAME|SND_ASYNC|SND_LOOP|SND_NODEFAULT);
   WNDCLASSW wc{};
   wc.lpfnWndProc = windowProc;
   wc.hInstance = instance;
@@ -117,19 +133,27 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
     const auto now = clock::now();
     accumulator += std::min(std::chrono::duration<float>(now - previous).count(), 0.1F);
     previous = now;
+    XINPUT_STATE pad{};
+    const bool hasPad = XInputGetState(0, &pad) == ERROR_SUCCESS;
+    const float padSteer = hasPad ? std::clamp(static_cast<float>(pad.Gamepad.sThumbLX) / 32767.0F, -1.0F, 1.0F) : 0.0F;
+    const float filteredSteer = std::abs(padSteer) > 0.16F ? padSteer : 0.0F;
     fiada::Input input{
-      .throttle = (down('W') || down(VK_UP)) ? 1.0F : 0.0F,
-      .brake = (down('S') || down(VK_DOWN)) ? 1.0F : 0.0F,
-      .steer = (down('D') || down(VK_RIGHT) ? 1.0F : 0.0F) -
-               (down('A') || down(VK_LEFT) ? 1.0F : 0.0F),
+      .throttle = hasPad ? pad.Gamepad.bRightTrigger / 255.0F : ((down('W') || down(VK_UP)) ? 1.0F : 0.0F),
+      .brake = hasPad ? pad.Gamepad.bLeftTrigger / 255.0F : ((down('S') || down(VK_DOWN)) ? 1.0F : 0.0F),
+      .steer = hasPad ? filteredSteer : ((down('D') || down(VK_RIGHT) ? 1.0F : 0.0F) -
+               (down('A') || down(VK_LEFT) ? 1.0F : 0.0F)),
       .reset = down('R'),
-      .drift = down(VK_SPACE),
+      .drift = down(VK_SPACE) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_A)),
       .toggleAi = down('P'),
-      .useItem = down(VK_LSHIFT) || down(VK_RSHIFT),
+      .useItem = down(VK_LSHIFT) || down(VK_RSHIFT) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_X)),
+      .menu = down('C') || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_START)),
+      .next = down(VK_OEM_6) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER)),
+      .previous = down(VK_OEM_4) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER)),
+      .labOverlay = down('L') || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_BACK)),
     };
     while (accumulator >= fixedStep) {
       app.game.update(fixedStep, input);
-      if (down(VK_TAB) && app.game.aiEnabled()) app.game.update(fixedStep, input);
+      if (down(VK_TAB) && app.game.spectatorFastForwardAllowed()) app.game.update(fixedStep, input);
       accumulator -= fixedStep;
     }
     if (now >= nextFrame) {
