@@ -29,6 +29,7 @@ class Game {
   void update(float dt, const Input& input);
   void render(SkCanvas& canvas);
   void enableAi() { aiEnabled_ = true; }
+  [[nodiscard]] bool aiEnabled() const { return aiEnabled_; }
   [[nodiscard]] int laps() const { return laps_; }
   [[nodiscard]] int checkpoint() const { return checkpoint_; }
   void beginTrainingEpisode(unsigned seed);

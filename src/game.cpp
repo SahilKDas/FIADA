@@ -421,18 +421,21 @@ void Game::update(float dt, const Input& input) {
   y_ += (std::sin(angle_) * velocityX_ + std::cos(angle_) * velocityY_) * dt * 14.0F;
   lapTime_ += dt;
 
-  // Dead-zone camera: stationary inside the central box, follow near the track,
-  // and never chase a car that has escaped the authored world.
+  // Forward-biased dead-zone camera: the view trails a focus point ahead of the
+  // car, placing the player behind screen center so upcoming corners stay visible.
   const float zoom = std::clamp(1.30F - std::abs(velocityX_) / 420.0F, 1.08F, 1.30F);
-  const float deadX = width_ * 0.19F / zoom;
-  const float deadY = height_ * 0.17F / zoom;
+  const float lookAhead = std::clamp(48.0F + std::abs(velocityX_) * 2.15F, 48.0F, 165.0F);
+  const float focusX = x_ + std::cos(angle_) * lookAhead;
+  const float focusY = y_ + std::sin(angle_) * lookAhead;
+  const float deadX = width_ * 0.10F / zoom;
+  const float deadY = height_ * 0.09F / zoom;
   const bool insideFollowWorld = x_ > -850.0F && x_ < 850.0F &&
                                  y_ > -560.0F && y_ < 560.0F;
   if (insideFollowWorld) {
-    if (x_ - cameraX_ > deadX) cameraX_ = x_ - deadX;
-    if (x_ - cameraX_ < -deadX) cameraX_ = x_ + deadX;
-    if (y_ - cameraY_ > deadY) cameraY_ = y_ - deadY;
-    if (y_ - cameraY_ < -deadY) cameraY_ = y_ + deadY;
+    if (focusX - cameraX_ > deadX) cameraX_ = focusX - deadX;
+    if (focusX - cameraX_ < -deadX) cameraX_ = focusX + deadX;
+    if (focusY - cameraY_ > deadY) cameraY_ = focusY - deadY;
+    if (focusY - cameraY_ < -deadY) cameraY_ = focusY + deadY;
     cameraX_ = std::clamp(cameraX_, -510.0F, 510.0F);
     cameraY_ = std::clamp(cameraY_, -330.0F, 330.0F);
   }
@@ -585,7 +588,7 @@ void Game::drawHud(SkCanvas& canvas) const {
   text(canvas, turbo, 42, 160, 16, turboTime_ > 0.0F ? SkColorSetRGB(64, 224, 255) : SkColorSetRGB(255, 174, 62));
   const char* itemName=heldItem_==kDiamond?"DIAMOND":heldItem_==kFeather?"FEATHER":heldItem_==kGoldKey?"GOLD KEY":"EMPTY";
   text(canvas,std::format("ITEM   {}   USES {}   CUTS {}",itemName,itemUses_,shortcutsTaken_),42,184,15,SkColorSetRGB(105,224,255));
-  text(canvas, "WASD / ARROWS DRIVE   HOLD SPACE DRIFT   SHIFT USE ITEM   P AI   R RESET", 24, height_ - 24.0F, 15,
+  text(canvas, "WASD / ARROWS DRIVE   HOLD SPACE DRIFT   SHIFT USE ITEM   P AI   TAB 2X AI   R RESET", 24, height_ - 24.0F, 15,
        SkColorSetARGB(220, 255, 255, 255));
 }
 

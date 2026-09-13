@@ -129,6 +129,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
     };
     while (accumulator >= fixedStep) {
       app.game.update(fixedStep, input);
+      if (down(VK_TAB) && app.game.aiEnabled()) app.game.update(fixedStep, input);
       accumulator -= fixedStep;
     }
     if (now >= nextFrame) {

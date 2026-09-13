@@ -11,10 +11,11 @@ FIADA is currently a playable top-down 2D racing prototype with a long, flowing,
 - `A D` / arrow keys: steer
 - `Space`: hold to drift; release a charged drift for a mini-turbo
 - `Shift`: use the held Diamond, Feather, or Gold Key
+- `Tab`: hold for 2× simulation speed while spectating AI mode only
 - `P`: toggle the trained reinforcement-learning driver
 - `R`: reset the car
 
-Complete a clockwise lap. Leaving the asphalt applies heavy drag and caps the car to roughly one-third of its road speed. The closer camera uses a central dead zone and follows only within the authored circuit bounds; driving entirely off-screen resets the car.
+Complete a clockwise lap. Leaving the asphalt applies heavy drag and caps the car to roughly one-third of its road speed. The closer camera trails a speed-scaled focus point in front of the car and follows only within the authored circuit bounds; driving entirely off-screen resets the car.
 
 ## Checkpoints and AI
 
