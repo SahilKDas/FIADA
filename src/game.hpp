@@ -44,6 +44,9 @@ class Game {
   [[nodiscard]] float playerSpeed() const { return std::hypot(velocityX_, velocityY_); }
   [[nodiscard]] bool countdownComplete() const { return countdownTicks_ <= 0; }
   [[nodiscard]] bool spectatorFastForwardAllowed() const { return aiEnabled_ || labMode_; }
+  [[nodiscard]] bool inFrontEnd() const { return frontEnd_; }
+  [[nodiscard]] bool championshipMode() const { return championshipMode_; }
+  [[nodiscard]] bool labMode() const { return labMode_; }
   void beginTrainingEpisode(unsigned seed);
   void beginItemTrainingEpisode(int itemType, unsigned seed);
   [[nodiscard]] policy::Observation observation() const;
@@ -74,6 +77,7 @@ class Game {
   void resolveRivalCollisions();
   void drawRivals(SkCanvas& canvas) const;
   void drawGrandPrixHud(SkCanvas& canvas) const;
+  void drawFrontEnd(SkCanvas& canvas) const;
   Input aiInput();
 
   int width_{1280};
@@ -130,10 +134,14 @@ class Game {
   std::array<int,8> championshipPoints_{};
   std::array<float,8> drivingProfile_{};
   int placement_{1};
+  int modeSelection_{};
   int countdownTicks_{360};
   int championshipRound_{};
   int trackIndex_{};
   bool labMode_{};
+  bool frontEnd_{};
+  bool titlePage_{true};
+  bool confirmHeld_{};
   bool championshipMode_{};
   bool overlayHeld_{};
   bool navHeld_{};

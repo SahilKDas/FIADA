@@ -76,6 +76,13 @@ bool down(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
 }  // namespace
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCommand) {
+  if (std::string_view(commandLine).find("--menu-smoke") != std::string_view::npos) {
+    fiada::Game game(true); if(!game.inFrontEnd())return 70;
+    fiada::Input input{};input.confirm=true;game.update(1.0F/120.0F,input);input.confirm=false;game.update(1.0F/120.0F,input);
+    input.brake=1.0F;game.update(1.0F/120.0F,input);input.brake=0.0F;game.update(1.0F/120.0F,input);
+    input.confirm=true;game.update(1.0F/120.0F,input);
+    return !game.inFrontEnd()&&game.championshipMode()&&!game.labMode()?0:71;
+  }
   if (std::string_view(commandLine).find("--grand-prix-smoke") != std::string_view::npos) {
     fiada::Game a(false), b(false); a.enableAi(); b.enableAi();
     for(int track=0;track<5;++track){
@@ -141,15 +148,16 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
     const float padSteer = hasPad ? std::clamp(static_cast<float>(pad.Gamepad.sThumbLX) / 32767.0F, -1.0F, 1.0F) : 0.0F;
     const float filteredSteer = std::abs(padSteer) > 0.16F ? padSteer : 0.0F;
     fiada::Input input{
-      .throttle = hasPad ? pad.Gamepad.bRightTrigger / 255.0F : ((down('W') || down(VK_UP)) ? 1.0F : 0.0F),
-      .brake = hasPad ? pad.Gamepad.bLeftTrigger / 255.0F : ((down('S') || down(VK_DOWN)) ? 1.0F : 0.0F),
+      .throttle = hasPad ? std::max(pad.Gamepad.bRightTrigger / 255.0F, (pad.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP) ? 1.0F : 0.0F) : ((down('W') || down(VK_UP)) ? 1.0F : 0.0F),
+      .brake = hasPad ? std::max(pad.Gamepad.bLeftTrigger / 255.0F, (pad.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN) ? 1.0F : 0.0F) : ((down('S') || down(VK_DOWN)) ? 1.0F : 0.0F),
       .steer = hasPad ? filteredSteer : ((down('D') || down(VK_RIGHT) ? 1.0F : 0.0F) -
                (down('A') || down(VK_LEFT) ? 1.0F : 0.0F)),
       .reset = down('R'),
       .drift = down(VK_SPACE) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_A)),
       .toggleAi = down('P'),
       .useItem = down(VK_LSHIFT) || down(VK_RSHIFT) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_X)),
-      .menu = down('C') || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_START)),
+      .menu = down(VK_ESCAPE) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_B)),
+      .confirm = down(VK_RETURN) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_A)),
       .next = down(VK_OEM_6) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER)),
       .previous = down(VK_OEM_4) || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER)),
       .labOverlay = down('L') || (hasPad && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_BACK)),

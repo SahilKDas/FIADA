@@ -4,6 +4,10 @@
 
 FIADA is a top-down 2D racer with a gold-themed 35-sector circuit, deterministic items, item-specific shortcuts, and a recurrent neural driver rendered through Skia.
 
+## Start and choose a mode
+
+FIADA opens on a title screen. Press Enter or controller A, choose Quick Race, Championship, or AI Lab with W/S, arrow keys, triggers/D-pad, then confirm with Enter or A. Press Escape or controller B during play to return to mode selection.
+
 ## Play
 
 - `W` / `Up`: accelerate

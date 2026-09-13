@@ -166,6 +166,7 @@ void text(SkCanvas& canvas, std::string_view value, float x, float y,
 }  // namespace
 
 Game::Game(bool assets) {
+  frontEnd_ = assets;
   reset();
   if (assets) loadAssets();
 }
@@ -337,12 +338,23 @@ Input Game::aiInput() {
 
 void Game::update(float dt, const Input& input) {
   dt = std::min(dt, 0.05F);
-  trainingReward_ = 0.0F;
+trainingReward_ = 0.0F;
+  if (frontEnd_) {
+    const bool nav=input.next||input.previous||input.brake>.5F||input.throttle>.5F;
+    if(!titlePage_ && nav && !navHeld_) modeSelection_=(modeSelection_+((input.next||input.brake>.5F)?1:2))%3;
+    navHeld_=nav;
+    if(input.confirm && !confirmHeld_){
+      if(titlePage_) titlePage_=false;
+      else { frontEnd_=false; championshipMode_=modeSelection_==1; labMode_=modeSelection_==2; aiEnabled_=labMode_; reset(); }
+    }
+    confirmHeld_=input.confirm;
+    return;
+  }
+  if(input.menu && !menuHeld_){frontEnd_=true;titlePage_=false;confirmHeld_=true;menuHeld_=true;return;}
   if (input.toggleAi && !aiToggleHeld_) aiEnabled_ = !aiEnabled_;
   aiToggleHeld_ = input.toggleAi;
   if (input.labOverlay && !overlayHeld_) labMode_ = !labMode_;
   overlayHeld_ = input.labOverlay;
-  if (input.menu && !menuHeld_) championshipMode_ = !championshipMode_;
   menuHeld_ = input.menu;
   if (!navHeld_ && input.next) { trackIndex_=(trackIndex_+1)%5; reset(); }
   if (!navHeld_ && input.previous) { trackIndex_=(trackIndex_+4)%5; reset(); }
@@ -643,6 +655,7 @@ void Game::drawHud(SkCanvas& canvas) const {
 
 void Game::render(SkCanvas& canvas) {
   canvas.clear(SK_ColorBLACK);
+  if (frontEnd_) { drawFrontEnd(canvas); return; }
   canvas.save();
   canvas.translate(width_ * 0.5F, height_ * 0.5F);
   const float zoom = std::clamp(1.30F - std::abs(velocityX_) / 420.0F, 1.08F, 1.30F);
@@ -654,6 +667,23 @@ void Game::render(SkCanvas& canvas) {
   drawHud(canvas);
 }
 
+void Game::drawFrontEnd(SkCanvas& canvas) const {
+  SkPaint p;p.setAntiAlias(true);p.setColor(SkColorSetRGB(7,10,16));canvas.drawPaint(p);
+  p.setColor(SkColorSetRGB(34,27,13));for(int x=-height_;x<width_;x+=92)canvas.drawRect(SkRect::MakeXYWH(static_cast<float>(x),0,28.0F,static_cast<float>(height_)),p);
+  p.setStyle(SkPaint::kStroke_Style);p.setStrokeWidth(4);p.setColor(SkColorSetRGB(210,153,38));canvas.drawRoundRect(SkRect::MakeXYWH(width_*.12F,height_*.10F,width_*.76F,height_*.80F),28,28,p);p.setStyle(SkPaint::kFill_Style);
+  text(canvas,"FIADA",width_*.5F-150,height_*.25F,88,SkColorSetRGB(255,203,62));
+  text(canvas,"FACIO LUDUM AUTOCINETUM",width_*.5F-178,height_*.31F,18,SkColorSetRGB(198,177,125));
+  if(titlePage_){
+    text(canvas,"NEURAL GRAND PRIX",width_*.5F-128,height_*.46F,30,SK_ColorWHITE);
+    text(canvas,"PRESS ENTER  /  CONTROLLER A",width_*.5F-180,height_*.67F,22,SkColorSetRGB(78,221,255));
+    text(canvas,"Eight drivers. Deterministic combat. Five circuits.",width_*.5F-230,height_*.75F,17,SkColorSetRGB(180,188,204));
+    return;
+  }
+  constexpr std::array<std::string_view,3> names{"QUICK RACE","CHAMPIONSHIP","AI LAB"};
+  constexpr std::array<std::string_view,3> descriptions{"Choose a circuit and race seven rivals","Five-race points campaign and adaptive champion","Spectate neural drivers with live telemetry"};
+  for(int i=0;i<3;++i){const float y=height_*(.40F+i*.135F);p.setColor(i==modeSelection_?SkColorSetARGB(235,169,112,18):SkColorSetARGB(220,18,24,34));canvas.drawRoundRect(SkRect::MakeXYWH(width_*.25F,y-39,width_*.50F,76),14,14,p);text(canvas,names[i],width_*.29F,y-5,24,i==modeSelection_?SK_ColorWHITE:SkColorSetRGB(185,190,202));text(canvas,descriptions[i],width_*.29F,y+20,14,i==modeSelection_?SkColorSetRGB(255,226,148):SkColorSetRGB(130,140,155));}
+  text(canvas,"UP / DOWN TO SELECT    ENTER / A TO START",width_*.5F-225,height_*.85F,17,SkColorSetRGB(78,221,255));
+}
 void Game::updateRivals(float dt) {
   const float playerProgress = static_cast<float>(laps_ * kSampleCount + nearestCourseSample(x_, y_));
   for (int i=0;i<7;++i) {
