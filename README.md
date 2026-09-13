@@ -34,7 +34,7 @@ cmake --build build-native-trainer --target FIADA_train
 ./build-native-trainer/FIADA_train.exe --evaluate ./assets/policy/fiada_policy.bin
 ```
 
-Accepted evaluation after item fine-tuning and guardrails: canonical lap in 45.928 seconds; 32/33 randomized races completed; 0/33 escaped; 15 mini-turbos; 46 pickups; 19 item uses; and direct activation tests pass for both new items. See `assets/policy/evaluation.json`.
+Accepted evaluation after item fine-tuning and contact smoothing: canonical lap in 45.928 seconds; 31/33 randomized races completed; 0/33 escaped; 16 mini-turbos; 46 pickups; 19 item uses; and direct activation tests pass for both new items. See `assets/policy/evaluation.json`.
 
 ## Deterministic items
 
@@ -61,3 +61,6 @@ Five championship geometries are available with `[` and `]`: Gold Circuit, Alpin
 Xbox-compatible XInput controllers use the left stick to steer, triggers to accelerate/brake, `A` to drift, `X` to use an item, shoulder buttons to change circuit, Back for the Lab. Escape, Backspace, or controller B returns to the menu. Keyboard control remains available. A redistributable CC0 engine loop and its provenance manifest live under `assets/audio`.
 
 Run `FIADA.exe --grand-prix-smoke` to replay five paired seeded simulations and verify deterministic hashes and valid eight-driver placement.
+## Effects, contact, and audio
+
+Cars use oriented footprint contacts matching their rendered length and width. Collision and guardrail separation is capped per physics tick to prevent lateral snapping. Horn pressure rings, Diamond-on-a-Rod tether/gem effects, turbo trails, and contact sparks expose forces visually. The engine loop starts only after the window exists; --audio-smoke validates the packaged WinMM playback path.

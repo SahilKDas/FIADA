@@ -184,7 +184,7 @@ void Game::reset() {
   velocityX_ = velocityY_ = yawRate_ = 0.0F;
   throttle_ = brake_ = steer_ = driftCharge_ = turboTime_ = 0.0F; miniTurbos_ = 0;
   wasDrifting_ = false; itemUseHeld_=shortcutCounted_=false;
-  heldItem_=shortcutItem_=kNoItem; lastItemBox_=-1; recentItems_={}; simulationTick_=0; itemEffectTime_=0.0F;
+  heldItem_=shortcutItem_=kNoItem; lastItemBox_=-1; recentItems_={}; simulationTick_=0; itemEffectTime_=impactFxTime_=wallFxTime_=0.0F;
   itemPickups_=itemUses_=shortcutsTaken_=0;
   itemPickupsByType_={};shortcutsByType_={};offroadTime_=0.0F;policyTick_=0;cachedPolicyOutput_={};
   policyState_ = {};
@@ -204,7 +204,7 @@ bool Game::onRoad(float x, float y) const {
 
 void Game::updateItems(const Input& control) {
   ++simulationTick_;
-  itemEffectTime_=std::max(0.0F,itemEffectTime_-1.0F/120.0F);
+  itemEffectTime_=std::max(0.0F,itemEffectTime_-1.0F/120.0F);impactFxTime_=std::max(0.0F,impactFxTime_-1.0F/120.0F);wallFxTime_=std::max(0.0F,wallFxTime_-1.0F/120.0F);
   if(itemEffectTime_<=0.0F) shortcutItem_=kNoItem;
   if(control.useItem && !itemUseHeld_ && heldItem_!=kNoItem){
     const int used=heldItem_; heldItem_=kNoItem; ++itemUses_;
@@ -212,7 +212,7 @@ void Game::updateItems(const Input& control) {
       // A deterministic radial pressure wave: no projectile and no random aim.
       for(auto& rival:rivals_){
         const float dx=rival.x-x_,dy=rival.y-y_,distance=std::hypot(dx,dy);
-        if(distance<190.0F && distance>0.01F){const float force=(190.0F-distance)/190.0F;rival.x+=dx/distance*force*72.0F;rival.y+=dy/distance*force*72.0F;rival.speed*=.38F;rival.turbo=0.0F;}
+        if(distance<190.0F && distance>0.01F){const float force=(190.0F-distance)/190.0F;rival.x+=dx/distance*force*20.0F;rival.y+=dy/distance*force*20.0F;rival.speed*=.52F;rival.hornFx=.32F;rival.turbo=0.0F;}
       }
       itemEffectTime_=.32F; shortcutItem_=kHorn;
     } else {
@@ -436,7 +436,7 @@ trainingReward_ = 0.0F;
   if(guardedSample(wallSample)){
     const auto center=courseSample(wallSample),ahead=courseSample(wallSample+1);float tx=ahead.x()-center.x(),ty=ahead.y()-center.y();const float length=std::hypot(tx,ty);tx/=length;ty/=length;
     const float side=(x_-center.x())*-ty+(y_-center.y())*tx;
-    if(std::abs(side)>82.0F&&std::abs(side)<132.0F){const float sign=side<0?-1.0F:1.0F;x_=center.x()-ty*sign*81.0F;y_=center.y()+tx*sign*81.0F;velocityX_*=.68F;velocityY_*=-.30F;yawRate_*=-.25F;}
+    if(std::abs(side)>78.0F&&shortcutItem_!=kDiamondRod){const float sign=side<0?-1.0F:1.0F,correction=std::min(std::abs(side)-78.0F,2.5F);x_+=ty*sign*correction;y_-=tx*sign*correction;velocityX_*=.985F;velocityY_=std::lerp(velocityY_,-velocityY_*.18F,.35F);yawRate_*=.92F;wallFxTime_=.10F;}
   }
   lapTime_ += dt;
 
@@ -636,7 +636,9 @@ void Game::render(SkCanvas& canvas) {
   canvas.scale(zoom, zoom);
   canvas.translate(-cameraX_, -cameraY_);
   drawTrack(canvas);
+  drawRivals(canvas);
   drawCar(canvas);
+  drawEffects(canvas);
   canvas.restore();
   drawHud(canvas);
 }
@@ -690,14 +692,27 @@ void Game::updateRivals(float dt) {
     r.progress=static_cast<float>(r.lap*kSampleCount+now);
     if((simulationTick_+i*97)%1700==0)r.item=1+static_cast<int>(mixBits(static_cast<std::uint32_t>(simulationTick_+i*313))%2);
     if(r.item&&((simulationTick_+i*31)%420==0)){if(r.item==1&&std::hypot(r.x-x_,r.y-y_)<190.0F){velocityX_*=.45F;velocityY_*=.45F;}else r.turbo=1.0F;r.item=0;}
-    r.turbo=std::max(0.0F,r.turbo-dt);
+    r.turbo=std::max(0.0F,r.turbo-dt);r.hornFx=std::max(0.0F,r.hornFx-dt);
   }
   placement_=1;for(const auto&r:rivals_)if(r.progress>playerProgress)++placement_;
   for(int i=0;i<7;++i){int p=1;for(int j=0;j<7;++j)if(rivals_[j].progress>rivals_[i].progress)++p;if(playerProgress>rivals_[i].progress)++p;rivals_[i].place=p;}
 }
 
 void Game::resolveRivalCollisions() {
-  for(auto&r:rivals_){const float dx=x_-r.x,dy=y_-r.y,d=std::hypot(dx,dy);if(d<45.0F&&d>.01F&&r.turbo<=0.0F&&itemEffectTime_<=0.0F){const float nx=dx/d,ny=dy/d,push=(45-d)*.18F;x_+=nx*push;y_+=ny*push;r.x-=nx*push;r.y-=ny*push;velocityY_+=std::clamp((-std::sin(angle_)*nx+std::cos(angle_)*ny)*4.0F,-5.0F,5.0F);r.speed*=.96F;}}
+  const float ca=std::cos(angle_),sa=std::sin(angle_);
+  for(auto& r:rivals_){
+    const float dx=r.x-x_,dy=r.y-y_,localX=dx*ca+dy*sa,localY=-dx*sa+dy*ca,delta=r.angle-angle_;
+    const float halfX=32.0F+std::abs(std::cos(delta))*30.0F+std::abs(std::sin(delta))*15.0F;
+    const float halfY=16.0F+std::abs(std::sin(delta))*30.0F+std::abs(std::cos(delta))*15.0F;
+    const float metric=(localX*localX)/(halfX*halfX)+(localY*localY)/(halfY*halfY);
+    if(metric<1.0F&&r.turbo<=0.0F&&!(shortcutItem_==kHorn&&itemEffectTime_>0.0F)){
+      float gx=localX/(halfX*halfX),gy=localY/(halfY*halfY),length=std::hypot(gx,gy);if(length<.0001F){gx=0;gy=1;length=1;}
+      gx/=length;gy/=length;const float nx=gx*ca-gy*sa,ny=gx*sa+gy*ca;
+      const float correction=std::min((1.0F-std::sqrt(std::max(metric,0.0F)))*halfY*.35F,1.6F);
+      x_-=nx*correction;r.x+=nx*correction;const float localNormal=-sa*nx+ca*ny;
+      velocityY_-=localNormal*std::min(2.2F,std::abs(velocityX_-r.speed)*.08F+.35F);velocityX_*=.992F;r.speed*=.988F;impactFxTime_=.14F;
+    }
+  }
 }
 
 void Game::drawRivals(SkCanvas& canvas) const {
@@ -706,6 +721,14 @@ void Game::drawRivals(SkCanvas& canvas) const {
   for(int i=0;i<7;++i){const auto&r=rivals_[i];canvas.save();canvas.translate(r.x,r.y);canvas.rotate(r.angle*180.0F/kPi);p.setColor(colors[i]);canvas.drawRoundRect(SkRect::MakeXYWH(-30,-15,60,30),8,8,p);p.setColor(SK_ColorBLACK);canvas.drawRect(SkRect::MakeXYWH(3,-11,14,22),p);if(r.turbo>0){p.setColor(SkColorSetARGB(180,60,220,255));canvas.drawCircle(-37,0,9,p);}canvas.restore();}
 }
 
+void Game::drawEffects(SkCanvas& canvas) const {
+  SkPaint p;p.setAntiAlias(true);p.setStyle(SkPaint::kStroke_Style);
+  if(turboTime_>0){p.setStrokeWidth(7);p.setColor(SkColorSetARGB(190,55,220,255));for(float side:{-10.0F,10.0F})canvas.drawLine(x_-std::cos(angle_)*30-std::sin(angle_)*side,y_-std::sin(angle_)*30+std::cos(angle_)*side,x_-std::cos(angle_)*58-std::sin(angle_)*side,y_-std::sin(angle_)*58+std::cos(angle_)*side,p);}
+  if(shortcutItem_==kHorn&&itemEffectTime_>0){const float phase=1.0F-itemEffectTime_/.32F;p.setStrokeWidth(7.0F*(1-phase)+2);p.setColor(SkColorSetARGB(static_cast<U8CPU>(220*(1-phase)),255,211,70));canvas.drawCircle(x_,y_,35.0F+phase*165.0F,p);}
+  for(const auto&r:rivals_)if(r.hornFx>0){const float phase=1-r.hornFx/.32F;p.setStrokeWidth(4);p.setColor(SkColorSetARGB(static_cast<U8CPU>(180*(1-phase)),255,190,35));canvas.drawCircle(r.x,r.y,30+phase*160,p);}
+  if(shortcutItem_==kDiamondRod&&itemEffectTime_>0){const float bob=std::sin(simulationTick_*.12F)*7.0F,dx=x_+std::cos(angle_)*72.0F-std::sin(angle_)*bob,dy=y_+std::sin(angle_)*72.0F+std::cos(angle_)*bob;p.setStrokeWidth(3);p.setColor(SkColorSetRGB(220,230,245));canvas.drawLine(x_+std::cos(angle_)*25,y_+std::sin(angle_)*25,dx,dy,p);p.setStyle(SkPaint::kFill_Style);p.setColor(SkColorSetRGB(75,225,255));SkPath gem;gem.moveTo(dx,dy-14);gem.lineTo(dx+11,dy);gem.lineTo(dx,dy+14);gem.lineTo(dx-11,dy);gem.close();canvas.drawPath(gem,p);p.setStyle(SkPaint::kStroke_Style);}
+  const float sparkTime=std::max(impactFxTime_,wallFxTime_);if(sparkTime>0){p.setStrokeWidth(3);p.setColor(impactFxTime_>0?SkColorSetRGB(255,220,90):SkColorSetRGB(255,150,40));for(int i=0;i<8;++i){const float a=i*kPi*.25F+simulationTick_*.17F,length=10+static_cast<float>((i*7)%13);canvas.drawLine(x_+std::cos(a)*20,y_+std::sin(a)*20,x_+std::cos(a)*(20+length),y_+std::sin(a)*(20+length),p);}}
+}
 void Game::drawGrandPrixHud(SkCanvas& canvas) const {
   text(canvas,std::format("PLACE {}/8  TRACK {}/5  PTS {}",placement_,trackIndex_+1,championshipPoints_[0]),width_-190.0F,58,28,SkColorSetRGB(255,205,55));
   if(countdownTicks_>0){const int n=(countdownTicks_+119)/120;text(canvas,n>0?std::format("{}",n):"GO!",width_*.48F,height_*.35F,72,SK_ColorWHITE);}

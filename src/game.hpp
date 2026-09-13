@@ -78,6 +78,7 @@ class Game {
   void updateRivals(float dt);
   void resolveRivalCollisions();
   void drawRivals(SkCanvas& canvas) const;
+  void drawEffects(SkCanvas& canvas) const;
   void drawGrandPrixHud(SkCanvas& canvas) const;
   void drawFrontEnd(SkCanvas& canvas) const;
   Input aiInput();
@@ -115,6 +116,8 @@ class Game {
   int lastItemBox_{-1};
   unsigned long long simulationTick_{};
   float itemEffectTime_{};
+  float impactFxTime_{};
+  float wallFxTime_{};
   float offroadTime_{};
   bool itemUseHeld_{};
   bool shortcutCounted_{};
@@ -132,7 +135,7 @@ class Game {
   policy::State policyState_{};
   policy::Output cachedPolicyOutput_{};
   int policyTick_{};
-  struct Rival { float x{},y{},angle{},speed{},progress{},turbo{}; int lap{},place{},item{},personality{}; bool finished{}; };
+  struct Rival { float x{},y{},angle{},speed{},progress{},turbo{}; int lap{},place{},item{},personality{}; bool finished{}; float hornFx{}; };
   std::array<Rival,7> rivals_{};
   std::array<int,8> championshipPoints_{};
   std::array<float,8> drivingProfile_{};

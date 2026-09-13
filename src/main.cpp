@@ -76,6 +76,11 @@ bool down(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
 }  // namespace
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCommand) {
+  if (std::string_view(commandLine).find("--audio-smoke") != std::string_view::npos) {
+    std::array<wchar_t,32768> path{};GetModuleFileNameW(nullptr,path.data(),static_cast<DWORD>(path.size()));
+    const auto wav=(std::filesystem::path(path.data()).parent_path()/L"assets/audio/engine_loop.wav").wstring();
+    return PlaySoundW(wav.c_str(),nullptr,SND_FILENAME|SND_SYNC|SND_NODEFAULT)?0:77;
+  }
   if (std::string_view(commandLine).find("--item-smoke") != std::string_view::npos) {
     fiada::Game horn(false);horn.beginItemTrainingEpisode(1,12345);fiada::Input use{};use.useItem=true;horn.update(1.0F/120.0F,use);if(horn.itemUses()!=1)return 75;
     fiada::Game rod(false);rod.beginItemTrainingEpisode(2,54321);rod.update(1.0F/120.0F,use);return rod.itemUses()==1&&rod.shortcutsTaken(2)==1?0:76;
@@ -121,7 +126,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
   std::array<wchar_t,32768> modulePath{};
   GetModuleFileNameW(nullptr,modulePath.data(),static_cast<DWORD>(modulePath.size()));
   const auto engineSound=(std::filesystem::path(modulePath.data()).parent_path()/L"assets/audio/engine_loop.wav").wstring();
-  PlaySoundW(engineSound.c_str(),nullptr,SND_FILENAME|SND_ASYNC|SND_LOOP|SND_NODEFAULT);
+
   WNDCLASSW wc{};
   wc.lpfnWndProc = windowProc;
   wc.hInstance = instance;
@@ -136,6 +141,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
       CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720, nullptr, nullptr, instance, &app);
   if (!window) return 1;
   ShowWindow(window, showCommand);
+  const BOOL audioStarted=PlaySoundW(engineSound.c_str(),nullptr,SND_FILENAME|SND_ASYNC|SND_LOOP|SND_NODEFAULT);
+  if(!audioStarted) MessageBeep(MB_ICONWARNING);
   RECT client{};
   GetClientRect(window, &client);
   app.resize(client.right - client.left, client.bottom - client.top);
