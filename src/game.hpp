@@ -2,6 +2,7 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -40,6 +41,8 @@ class Game {
   [[nodiscard]] int laps() const { return laps_; }
   [[nodiscard]] int checkpoint() const { return checkpoint_; }
   [[nodiscard]] int placement() const { return placement_; }
+  [[nodiscard]] float playerSpeed() const { return std::hypot(velocityX_, velocityY_); }
+  [[nodiscard]] bool countdownComplete() const { return countdownTicks_ <= 0; }
   [[nodiscard]] bool spectatorFastForwardAllowed() const { return aiEnabled_ || labMode_; }
   void beginTrainingEpisode(unsigned seed);
   void beginItemTrainingEpisode(int itemType, unsigned seed);

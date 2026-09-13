@@ -80,8 +80,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
     fiada::Game a(false), b(false); a.enableAi(); b.enableAi();
     for(int track=0;track<5;++track){
       if(track){fiada::Input next{};next.next=true;a.update(1.0F/120.0F,next);b.update(1.0F/120.0F,next);}
-      for(int step=0;step<1800;++step){a.update(1.0F/120.0F,{});b.update(1.0F/120.0F,{});}
-      if(a.deterministicHash()!=b.deterministicHash()||a.placement()<1||a.placement()>8)return 8;
+      bool moved=false;
+      for(int step=0;step<1800;++step){a.update(1.0F/120.0F,{});b.update(1.0F/120.0F,{});if(step==480)moved=a.countdownComplete()&&a.playerSpeed()>1.0F;}
+      if(a.deterministicHash()!=b.deterministicHash())return 30+track;
+      if(a.placement()<1||a.placement()>8)return 40+track;
+      if(!moved)return a.countdownComplete()?50+track:60+track;
     }
     return 0;
   }

@@ -197,7 +197,8 @@ void Game::reset() {
   itemPickups_=itemUses_=shortcutsTaken_=0;
   itemPickupsByType_={};shortcutsByType_={};offroadTime_=0.0F;policyTick_=0;cachedPolicyOutput_={};
   policyState_ = {};
-  cameraX_ = cameraY_ = 0.0F;
+  cameraX_ = x_ + std::cos(angle_) * 90.0F;
+  cameraY_ = y_ + std::sin(angle_) * 90.0F;
   countdownTicks_ = trainingMode_ ? 0 : 360; placement_ = 1; raceAwarded_=false;
   for (int i=0;i<7;++i) { auto p=courseSample(kSampleCount-i*3-5); auto q=courseSample(kSampleCount-i*3-4); rivals_[i]={p.x(),p.y(),std::atan2(q.y()-p.y(),q.x()-p.x()),18.0F,static_cast<float>(kSampleCount-i*3-5),0.0F,0, i+2, 0, i%5, false}; }
   previousX_ = x_;
@@ -351,6 +352,7 @@ void Game::update(float dt, const Input& input) {
   Input control = aiEnabled_ ? aiInput() : input;
   if (!trainingMode_ && countdownTicks_>0) { control.throttle=control.brake=control.steer=0.0F; control.drift=control.useItem=false; }
   updateItems(control);
+  if (!trainingMode_) { if (countdownTicks_ > 0) --countdownTicks_; else updateRivals(dt); }
 
   // Six-state nonlinear bicycle model: compact enough for batched training.
   constexpr float mass = 1180.0F, inertia = 1760.0F;
@@ -480,7 +482,7 @@ void Game::update(float dt, const Input& input) {
   trainingReward_ = progressDelta * 4.0F + std::max(velocityX_, 0.0F) * 0.006F -
                     (road ? 0.0F : 1.25F) + (turboTime_ > 0.0F ? 0.055F : 0.0F);
   if (!trainingMode_) resolveRivalCollisions();
-  if (escaped) {
+  if (escaped && (trainingMode_ || (countdownTicks_ <= 0 && simulationTick_ > 1200))) {
     if (trainingMode_) { trainingReward_ -= 90.0F; trainingTerminal_ = true; }
     else reset();
     return;
