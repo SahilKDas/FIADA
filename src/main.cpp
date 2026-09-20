@@ -76,6 +76,13 @@ bool down(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
 }  // namespace
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCommand) {
+  if (std::string_view(commandLine).find("--wild-west-smoke") != std::string_view::npos) {
+    fiada::Game game(true);game.resize(1280,720);fiada::Input confirm{};confirm.confirm=true;game.update(1.0F/120.0F,confirm);game.update(1.0F/120.0F,{});game.update(1.0F/120.0F,confirm);game.update(1.0F/120.0F,{});for(int i=0;i<5;++i){fiada::Input next{};next.next=true;game.update(1.0F/120.0F,next);game.update(1.0F/120.0F,{});}game.enableAi();
+    for(int step=0;step<360*120&&game.laps()==0;++step)game.update(1.0F/120.0F,{});
+    if(game.selectedTrack()!=5)return 80;
+    if(game.laps()!=1)return 100+game.checkpoint();
+    return game.bestLap()>120.0F?0:79;
+  }
   if (std::string_view(commandLine).find("--audio-smoke") != std::string_view::npos) {
     std::array<wchar_t,32768> path{};GetModuleFileNameW(nullptr,path.data(),static_cast<DWORD>(path.size()));
     const auto wav=(std::filesystem::path(path.data()).parent_path()/L"assets/audio/engine_loop.wav").wstring();
@@ -104,7 +111,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int showCom
   }
   if (std::string_view(commandLine).find("--grand-prix-smoke") != std::string_view::npos) {
     fiada::Game a(false), b(false); a.enableAi(); b.enableAi();
-    for(int track=0;track<5;++track){
+    for(int track=0;track<6;++track){
       if(track){fiada::Input next{};next.next=true;a.update(1.0F/120.0F,next);b.update(1.0F/120.0F,next);}
       bool moved=false;
       for(int step=0;step<1800;++step){a.update(1.0F/120.0F,{});b.update(1.0F/120.0F,{});if(step==480)moved=a.countdownComplete()&&a.playerSpeed()>1.0F;}

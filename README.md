@@ -56,7 +56,7 @@ Original SVG art is in `assets/svg`; Skia-ready PNGs are in `assets/png`.
 
 FIADA now stages eight-driver races: one player and seven deterministic rivals. The five profile slots emphasize aggression, defense, shortcuts, drift, and recovery. Drafting, contact impulses, live placement, a three-second grid countdown, deterministic rival items, and forward-camera racing run inside the same 120 Hz simulation.
 
-Five championship geometries are available with `[` and `]`: Gold Circuit, Alpine Switchbacks, Volcanic Foundry, Coastal Causeway, and Neon City. AI Lab opens a five-track picker before launching; `L` toggles its telemetry overlay. The Lab exposes policy inputs/outputs, a recurrent hidden-state summary, and the live rival tournament order without changing simulation state.
+Six course geometries are available with `[` and `]`: Gold Circuit, Alpine Switchbacks, Volcanic Foundry, Coastal Causeway, Neon City, and Grand Wild West. AI Lab opens a six-track picker before launching; `L` toggles its telemetry overlay. The Lab exposes policy inputs/outputs, a recurrent hidden-state summary, and the live rival tournament order without changing simulation state.
 
 Xbox-compatible XInput controllers use the left stick to steer, triggers to accelerate/brake, `A` to drift, `X` to use an item, shoulder buttons to change circuit, Back for the Lab. Escape, Backspace, or controller B returns to the menu. Keyboard control remains available. A redistributable CC0 engine loop and its provenance manifest live under `assets/audio`.
 
@@ -64,3 +64,7 @@ Run `FIADA.exe --grand-prix-smoke` to replay five paired seeded simulations and 
 ## Effects, contact, and audio
 
 Cars use oriented footprint contacts matching their rendered length and width. Collision and guardrail separation is capped per physics tick to prevent lateral snapping. Horn pressure rings, Diamond-on-a-Rod tether/gem effects, turbo trails, and contact sparks expose forces visually. The engine loop starts only after the window exists; --audio-smoke validates the packaged WinMM playback path.
+
+## Grand Wild West
+
+Grand Wild West is a special one-lap endurance circuit whose accepted AI lap exceeds two minutes. Its oversized desert route has a moving three-car train crossing, laterally roaming tumbleweeds, canyon boulders, low-grip dust basins, partial guardrails, cactus scenery, a dedicated desert palette, and ordered endurance checkpoints. The train, tumbleweeds, boulders, and dust affect human and AI drivers deterministically. Select it from AI Lab or cycle to track 6 with the shoulder/track controls.

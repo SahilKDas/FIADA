@@ -77,8 +77,10 @@ class Game {
   void drawCar(SkCanvas& canvas) const;
   void updateRivals(float dt);
   void resolveRivalCollisions();
+  void resolveHazards(float dt);
   void drawRivals(SkCanvas& canvas) const;
   void drawEffects(SkCanvas& canvas) const;
+  void drawHazards(SkCanvas& canvas) const;
   void drawGrandPrixHud(SkCanvas& canvas) const;
   void drawFrontEnd(SkCanvas& canvas) const;
   Input aiInput();
@@ -118,6 +120,8 @@ class Game {
   float itemEffectTime_{};
   float impactFxTime_{};
   float wallFxTime_{};
+  float hazardFxTime_{};
+  int hazardHits_{};
   float offroadTime_{};
   bool itemUseHeld_{};
   bool shortcutCounted_{};
